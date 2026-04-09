@@ -308,10 +308,12 @@ def load_for_arena(
     # Heavy imports deferred to here so that merely importing the adapter
     # module does not load JAX / haiku / orbax (whose C++ extensions can
     # deadlock alongside PyTorch on macOS).
+    import pathlib
+
     import jax
+    import orbax.checkpoint as ocp
     from jax import random as jrandom
     from searchless_chess.src import tokenizer
-    from searchless_chess.src import training_utils
     from searchless_chess.src import transformer
     from searchless_chess.src import utils as sc_utils
     from searchless_chess.src.engines import neural_engines
@@ -344,15 +346,19 @@ def load_for_arena(
         repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         checkpoint_dir = os.path.join(repo_root, "checkpoints", model_name)
 
-    params = training_utils.load_parameters(
-        params=predictor.initial_params(
-            rng=jrandom.PRNGKey(1),
-            targets=np.ones((1, 1), dtype=np.uint32),
-        ),
-        step=step,
-        use_ema_params=use_ema_params,
-        checkpoint_dir=checkpoint_dir,
+    # Inline load_parameters from training_utils to avoid importing it
+    # (it uses jax.sharding.PositionalSharding which was removed in newer JAX).
+    init_params = predictor.initial_params(
+        rng=jrandom.PRNGKey(1),
+        targets=np.ones((1, 1), dtype=np.uint32),
     )
+    checkpoint_steps = ocp.utils.checkpoint_steps(checkpoint_dir)
+    resolved_step = checkpoint_steps[-1] if step == -1 else step
+    dir_name = "params_ema" if use_ema_params else "params"
+    checkpoint_path = pathlib.Path(checkpoint_dir) / str(resolved_step) / dir_name
+    restore_args = ocp.checkpoint_utils.construct_restore_args(init_params)
+    checkpointer = ocp.Checkpointer(ocp.PyTreeCheckpointHandler())
+    params = checkpointer.restore(checkpoint_path, restore_args=restore_args)
 
     predict_fn = neural_engines.wrap_predict_fn(
         predictor=predictor,

@@ -32,7 +32,19 @@ Example usage from the arena repo::
 """
 
 import os
+import sys
 from typing import Callable, Dict, Optional
+
+# Stub out apache_beam before any transitive import from searchless_chess
+# can trigger it — the C++ mutex implementation crashes on macOS.
+if "apache_beam" not in sys.modules:
+    import types as _types
+
+    _beam = _types.ModuleType("apache_beam")
+    _beam.coders = _types.ModuleType("apache_beam.coders")  # type: ignore[attr-defined]
+    sys.modules.setdefault("apache_beam", _beam)
+    sys.modules.setdefault("apache_beam.coders", _beam.coders)
+    del _beam, _types
 
 import chess
 import haiku as hk

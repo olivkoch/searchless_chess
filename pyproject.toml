@@ -12,6 +12,7 @@ dependencies = [
     "chess",
     "chex",
     "dm-haiku",
+    "flax",
     "jax",
     "jaxtyping",
     "numpy",

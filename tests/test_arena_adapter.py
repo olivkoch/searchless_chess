@@ -13,26 +13,32 @@ Run with:
 
 import os
 import sys
+import time
 import unittest
 
-# apache-beam's C++ mutex crashes on macOS when imported transitively via
-# searchless_chess.src.constants.  Stub it out before any project imports.
+# apache-beam and grain can crash or be missing.  Stub them out before any
+# project imports (same approach as arena_adapter.py).
 import types
 
-_beam_stub = types.ModuleType("apache_beam")
-_coders_stub = types.ModuleType("apache_beam.coders")
+class _PermissiveDummy:
+    def __init__(self, *a, **kw): pass
+    def __call__(self, *a, **kw): return _PermissiveDummy()
+    def __getattr__(self, name): return _PermissiveDummy
 
-class _DummyCoder:
-    pass
+class _PermissiveModule(types.ModuleType):
+    def __getattr__(self, name): return _PermissiveDummy
 
-_coders_stub.StrUtf8Coder = _DummyCoder  # type: ignore[attr-defined]
-_coders_stub.BigIntegerCoder = _DummyCoder  # type: ignore[attr-defined]
-_coders_stub.FloatCoder = _DummyCoder  # type: ignore[attr-defined]
-_coders_stub.TupleCoder = lambda *a, **kw: _DummyCoder()  # type: ignore[attr-defined]
-
-_beam_stub.coders = _coders_stub  # type: ignore[attr-defined]
-sys.modules.setdefault("apache_beam", _beam_stub)
-sys.modules.setdefault("apache_beam.coders", _coders_stub)
+for _mod, _subs in [
+    ("apache_beam", ["apache_beam.coders"]),
+    ("grain", ["grain.python"]),
+]:
+    if _mod not in sys.modules:
+        _stub = _PermissiveModule(_mod)
+        sys.modules[_mod] = _stub
+        for _sub in _subs:
+            _sub_mod = _PermissiveModule(_sub)
+            sys.modules[_sub] = _sub_mod
+            setattr(_stub, _sub.split(".")[-1], _sub_mod)
 
 import chess
 import numpy as np
@@ -78,6 +84,8 @@ class TestArenaAdapter(unittest.TestCase):
     adapter = None
     engine = None
 
+    _call_times: list = []
+
     @classmethod
     def setUpClass(cls):
         from searchless_chess.src.arena_adapter import load_for_arena
@@ -90,6 +98,7 @@ class TestArenaAdapter(unittest.TestCase):
                 "Run checkpoints/download.sh first."
             )
 
+        t0 = time.perf_counter()
         cls.adapter = load_for_arena(
             model_name="9M",
             board_to_chess_fn=_identity_board_to_chess,
@@ -97,7 +106,23 @@ class TestArenaAdapter(unittest.TestCase):
             num_arena_actions=NUM_ACTIONS,
             predict_batch_size=32,
         )
+        cls._load_time = time.perf_counter() - t0
         cls.engine = cls.adapter.sc_engine
+        cls._call_times = []
+
+    @classmethod
+    def tearDownClass(cls):
+        print(f"\n{'='*60}")
+        print(f"TIMING SUMMARY")
+        print(f"{'='*60}")
+        print(f"  Model load:        {cls._load_time:.3f}s")
+        if cls._call_times:
+            arr = np.array(cls._call_times)
+            print(f"  Inference calls:   {len(arr)}")
+            print(f"  Total inference:   {arr.sum():.3f}s")
+            print(f"  Mean per call:     {arr.mean():.3f}s")
+            print(f"  Min / Max:         {arr.min():.3f}s / {arr.max():.3f}s")
+        print(f"{'='*60}")
 
     # ----- helpers --------------------------------------------------------
 
@@ -105,9 +130,11 @@ class TestArenaAdapter(unittest.TestCase):
         """Call forward_for_mcts with a single board and return policy, value."""
         board_arr = _encode_board(board).reshape(1, -1)
         player = np.array([1 if board.turn == chess.WHITE else 2], dtype=np.int64)
+        t0 = time.perf_counter()
         result = self.adapter.forward_for_mcts(
             {"boards": board_arr, "current_player": player}
         )
+        self._call_times.append(time.perf_counter() - t0)
         policy = result["policy"]
         value = result["value"]
         # If torch is available, convert tensors to numpy.
@@ -194,9 +221,11 @@ class TestArenaAdapter(unittest.TestCase):
         board_arrs = np.stack([_encode_board(b) for b in boards])
         players = np.array([1, 1], dtype=np.int64)
 
+        t0 = time.perf_counter()
         result = self.adapter.forward_for_mcts(
             {"boards": board_arrs, "current_player": players}
         )
+        self._call_times.append(time.perf_counter() - t0)
         policy = result["policy"]
         value = result["value"]
         if hasattr(policy, "numpy"):

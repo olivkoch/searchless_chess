@@ -46,19 +46,25 @@ import numpy as np
 # C++ extensions whose abseil mutex implementation deadlocks on macOS
 # when loaded alongside PyTorch's libtorch.
 # ---------------------------------------------------------------------------
+
+class _PermissiveModule(_types.ModuleType):
+    """Module stub that returns a dummy class for any attribute access."""
+    def __getattr__(self, name):
+        return type(name, (), {})
+
 for _mod_name, _sub_names in [
     ("apache_beam", ["apache_beam.coders"]),
     ("grain", ["grain.python"]),
 ]:
     if _mod_name not in sys.modules:
-        _stub = _types.ModuleType(_mod_name)
+        _stub = _PermissiveModule(_mod_name)
         sys.modules[_mod_name] = _stub
         for _sub_name in _sub_names:
-            _sub_mod = _types.ModuleType(_sub_name)
+            _sub_mod = _PermissiveModule(_sub_name)
             sys.modules[_sub_name] = _sub_mod
             setattr(_stub, _sub_name.split(".")[-1], _sub_mod)
 
-del _types, _mod_name, _sub_names
+del _PermissiveModule, _types, _mod_name, _sub_names
 
 # Prevent grpcio's abseil C++ mutex deadlock on macOS.
 os.environ.setdefault("GRPC_ENABLE_FORK_SUPPORT", "0")

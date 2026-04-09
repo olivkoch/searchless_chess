@@ -31,34 +31,39 @@ Example usage from the arena repo::
     models["searchless_9M"] = adapter
 """
 
+from __future__ import annotations
+
 import os
 import sys
+import types as _types
 from typing import Callable, Dict, Optional
 
-# Stub out apache_beam before any transitive import from searchless_chess
-# can trigger it — the C++ mutex implementation crashes on macOS.
-if "apache_beam" not in sys.modules:
-    import types as _types
-
-    _beam = _types.ModuleType("apache_beam")
-    _beam.coders = _types.ModuleType("apache_beam.coders")  # type: ignore[attr-defined]
-    sys.modules.setdefault("apache_beam", _beam)
-    sys.modules.setdefault("apache_beam.coders", _beam.coders)
-    del _beam, _types
-
-import chess
-import haiku as hk
-import jax
 import numpy as np
-import scipy.special
-from jax import random as jrandom
 
-from searchless_chess.src import tokenizer
-from searchless_chess.src import training_utils
-from searchless_chess.src import transformer
-from searchless_chess.src import utils as sc_utils
-from searchless_chess.src.engines import engine as engine_lib
-from searchless_chess.src.engines import neural_engines
+# ---------------------------------------------------------------------------
+# Stub out training-only native deps BEFORE any transitive import from
+# searchless_chess can trigger them.  apache_beam and grain both pull in
+# C++ extensions whose abseil mutex implementation deadlocks on macOS
+# when loaded alongside PyTorch's libtorch.
+# ---------------------------------------------------------------------------
+for _mod_name, _sub_names in [
+    ("apache_beam", ["apache_beam.coders"]),
+    ("grain", ["grain.python"]),
+]:
+    if _mod_name not in sys.modules:
+        _stub = _types.ModuleType(_mod_name)
+        sys.modules[_mod_name] = _stub
+        for _sub_name in _sub_names:
+            _sub_mod = _types.ModuleType(_sub_name)
+            sys.modules[_sub_name] = _sub_mod
+            setattr(_stub, _sub_name.split(".")[-1], _sub_mod)
+
+del _types, _mod_name, _sub_names
+
+# Prevent grpcio's abseil C++ mutex deadlock on macOS.
+os.environ.setdefault("GRPC_ENABLE_FORK_SUPPORT", "0")
+
+import chess  # pure Python — safe at module level
 
 try:
     import torch
@@ -187,6 +192,7 @@ class SearchlessChessAdapter(_get_base_class()):
     # ----- Internal -------------------------------------------------------
 
     def _legal_moves_sorted(self, board: chess.Board):
+        from searchless_chess.src.engines import engine as engine_lib
         return engine_lib.get_ordered_legal_moves(board)
 
     def _map_to_arena_policy(self, board, win_probs):
@@ -202,6 +208,9 @@ class SearchlessChessAdapter(_get_base_class()):
         return policy
 
     def _evaluate_position(self, board: chess.Board):
+        from searchless_chess.src.engines import neural_engines
+        import scipy.special
+
         eng = self.sc_engine
 
         if isinstance(eng, neural_engines.ActionValueEngine):
@@ -281,6 +290,17 @@ def load_for_arena(
             f"Unknown model: {model_name}. "
             f"Choose from {list(_MODEL_CONFIGS.keys())}"
         )
+
+    # Heavy imports deferred to here so that merely importing the adapter
+    # module does not load JAX / haiku / orbax (whose C++ extensions can
+    # deadlock alongside PyTorch on macOS).
+    import jax
+    from jax import random as jrandom
+    from searchless_chess.src import tokenizer
+    from searchless_chess.src import training_utils
+    from searchless_chess.src import transformer
+    from searchless_chess.src import utils as sc_utils
+    from searchless_chess.src.engines import neural_engines
 
     cfg = _MODEL_CONFIGS[model_name]
     policy = cfg["policy"]

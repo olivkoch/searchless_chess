@@ -48,9 +48,16 @@ import numpy as np
 # ---------------------------------------------------------------------------
 
 class _PermissiveModule(_types.ModuleType):
-    """Module stub that returns a dummy class for any attribute access."""
+    """Module stub that returns a permissive dummy for any attribute access."""
     def __getattr__(self, name):
-        return type(name, (), {})
+        return _PermissiveDummy
+
+
+class _PermissiveDummy:
+    """Accepts any construction/call pattern and returns itself."""
+    def __init__(self, *a, **kw): pass
+    def __call__(self, *a, **kw): return _PermissiveDummy()
+    def __getattr__(self, name): return _PermissiveDummy
 
 for _mod_name, _sub_names in [
     ("apache_beam", ["apache_beam.coders"]),
@@ -64,7 +71,7 @@ for _mod_name, _sub_names in [
             sys.modules[_sub_name] = _sub_mod
             setattr(_stub, _sub_name.split(".")[-1], _sub_mod)
 
-del _PermissiveModule, _types, _mod_name, _sub_names
+del _PermissiveModule, _PermissiveDummy, _types, _mod_name, _sub_names
 
 # Prevent grpcio's abseil C++ mutex deadlock on macOS.
 os.environ.setdefault("GRPC_ENABLE_FORK_SUPPORT", "0")

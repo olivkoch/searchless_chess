@@ -238,6 +238,43 @@ class TestArenaAdapter(unittest.TestCase):
         for i in range(2):
             self.assertAlmostEqual(float(policy[i].sum()), 1.0, places=3)
 
+    def test_self_play_game(self):
+        """Play a short game against itself and log moves + values."""
+        board = chess.Board()
+        moves_log = []
+        max_moves = 20  # 20 half-moves
+
+        for ply in range(max_moves):
+            if board.is_game_over():
+                break
+            policy, value = self._call_adapter(board)
+            best_action = int(np.argmax(policy))
+            best_uci = ACTION_TO_MOVE[best_action]
+            best_prob = float(policy[best_action])
+
+            # Also get engine's choice for comparison
+            engine_move = self._get_engine_best_move(board)
+
+            match = "OK" if best_uci == engine_move.uci() else "MISMATCH"
+            moves_log.append(
+                f"  {ply+1:3d}. {'W' if board.turn == chess.WHITE else 'B'} "
+                f"adapter={best_uci} ({best_prob:.3f}) value={value:+.3f}  "
+                f"engine={engine_move.uci()}  {match}"
+            )
+            board.push(chess.Move.from_uci(best_uci))
+
+        outcome = board.outcome()
+        status = str(outcome) if outcome else f"in progress after {max_moves} ply"
+
+        print(f"\n{'='*60}")
+        print(f"SELF-PLAY DIAGNOSTIC ({max_moves} ply max)")
+        print(f"{'='*60}")
+        for line in moves_log:
+            print(line)
+        print(f"  Final FEN: {board.fen()}")
+        print(f"  Status: {status}")
+        print(f"{'='*60}")
+
 
 if __name__ == "__main__":
     unittest.main()

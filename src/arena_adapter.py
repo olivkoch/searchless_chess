@@ -147,6 +147,7 @@ class SearchlessChessAdapter(_get_base_class()):
         hparams=None,
         player_white: int = 1,
         player_black: int = 2,
+        debug: bool = False,
     ):
         super().__init__()
         self.sc_engine = sc_engine
@@ -158,6 +159,8 @@ class SearchlessChessAdapter(_get_base_class()):
         # Attributes the arena / MCTS may read.
         self.logic = logic
         self.hparams = hparams
+        self.debug = debug
+        self._call_count = 0
 
     # ----- torch.nn.Module interface the arena expects --------------------
 
@@ -187,6 +190,25 @@ class SearchlessChessAdapter(_get_base_class()):
             if board.turn != expected_turn:
                 board.turn = expected_turn
             policies[i], values[i] = self._evaluate_position(board)
+
+            if self.debug and self._call_count < 200:
+                best_action = int(np.argmax(policies[i]))
+                # Reverse-lookup action -> UCI
+                best_uci = "?"
+                for uci_str, idx in self.uci_to_arena_action.items():
+                    if idx == best_action:
+                        best_uci = uci_str
+                        break
+                import sys
+                print(
+                    f"[SC_DEBUG #{self._call_count}] "
+                    f"FEN={board.fen()[:60]}  "
+                    f"best={best_uci} (p={policies[i][best_action]:.3f})  "
+                    f"v={values[i]:+.3f}  "
+                    f"B={B} player={int(players_np[i])}",
+                    file=sys.stderr, flush=True,
+                )
+                self._call_count += 1
 
         if torch is not None:
             return {
@@ -275,6 +297,7 @@ def load_for_arena(
     predict_batch_size: int = 32,
     player_white: int = 1,
     player_black: int = 2,
+    debug: bool = False,
 ) -> SearchlessChessAdapter:
     """Load a searchless_chess model and wrap it for arena use.
 
@@ -384,4 +407,5 @@ def load_for_arena(
         hparams=hparams,
         player_white=player_white,
         player_black=player_black,
+        debug=debug,
     )

@@ -178,6 +178,7 @@ class SearchlessChessAdapter(_get_base_class()):
             players_np = np.asarray(players)
             device = None
 
+        import time as _time
         B = boards_np.shape[0]
         policies = np.zeros((B, self.num_arena_actions), dtype=np.float32)
         values = np.zeros(B, dtype=np.float32)
@@ -189,7 +190,9 @@ class SearchlessChessAdapter(_get_base_class()):
             )
             if board.turn != expected_turn:
                 board.turn = expected_turn
+            _t0 = _time.perf_counter()
             policies[i], values[i] = self._evaluate_position(board)
+            _elapsed = _time.perf_counter() - _t0
 
             if self.debug and self._call_count < 200:
                 best_action = int(np.argmax(policies[i]))
@@ -202,6 +205,7 @@ class SearchlessChessAdapter(_get_base_class()):
                 import sys
                 print(
                     f"[SC_DEBUG #{self._call_count}] "
+                    f"{_elapsed:.3f}s  "
                     f"FEN={board.fen()[:60]}  "
                     f"best={best_uci} (p={policies[i][best_action]:.3f})  "
                     f"v={values[i]:+.3f}  "

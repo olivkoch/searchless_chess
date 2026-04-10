@@ -243,7 +243,7 @@ class SearchlessChessAdapter(_get_base_class()):
         for j, move in enumerate(self._legal_moves_sorted(board)):
             arena_idx = self.uci_to_arena_action.get(move.uci())
             if arena_idx is not None:
-                policy[arena_idx] = max(win_probs[j], 1e-8)
+                policy[arena_idx] = win_probs[j]
         total = policy.sum()
         if total > 0:
             policy /= total

@@ -254,30 +254,43 @@ class SearchlessChessAdapter(_get_base_class()):
         import scipy.special
 
         eng = self.sc_engine
+        is_black = not board.turn
 
         if isinstance(eng, neural_engines.ActionValueEngine):
             analysis = eng.analyse(board)
             probs = np.exp(analysis["log_probs"])
             win_probs = np.inner(probs, eng._return_buckets_values)
+
+            # Model always outputs win% from White's perspective.
+            # When it's Black's turn, invert so we rank moves from Black's perspective.
+            if is_black:
+                win_probs = 1.0 - win_probs
+
             policy = self._map_to_arena_policy(board, win_probs)
             # V(s) ≈ max_a Q(s,a), mapped from [0,1] to [-1,1]
             value = float(np.max(win_probs)) * 2.0 - 1.0
 
         elif isinstance(eng, neural_engines.StateValueEngine):
             analysis = eng.analyse(board)
-            # next_log_probs are already flipped (negated value for opponent).
+            # next_log_probs are already negated for the opponent by the engine,
+            # so win_probs here already ranks moves from the current player's POV.
             next_probs = np.exp(analysis["next_log_probs"])
             win_probs = np.inner(next_probs, eng._return_buckets_values)
             policy = self._map_to_arena_policy(board, win_probs)
             # Current position value.
             current_probs = np.exp(analysis["current_log_probs"])
-            value = float(np.inner(current_probs, eng._return_buckets_values)) * 2.0 - 1.0
+            current_value = float(np.inner(current_probs, eng._return_buckets_values))
+            if is_black:
+                current_value = 1.0 - current_value
+            value = current_value * 2.0 - 1.0
 
         elif isinstance(eng, neural_engines.BCEngine):
             analysis = eng.analyse(board)
+            # BC outputs action probabilities directly — these are already from
+            # the current player's POV (the model picks the best move to play),
+            # so no perspective flip needed.
             action_probs = scipy.special.softmax(np.asarray(analysis["log_probs"]))
             policy = self._map_to_arena_policy(board, action_probs)
-            # BC has no value head.
             value = 0.0
 
         else:

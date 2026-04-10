@@ -148,6 +148,7 @@ class SearchlessChessAdapter(_get_base_class()):
         player_white: int = 1,
         player_black: int = 2,
         debug: bool = False,
+        model_name: str = "?",
     ):
         super().__init__()
         self.sc_engine = sc_engine
@@ -156,6 +157,7 @@ class SearchlessChessAdapter(_get_base_class()):
         self.num_arena_actions = num_arena_actions
         self.player_white = player_white
         self.player_black = player_black
+        self.model_name = model_name
         # Attributes the arena / MCTS may read.
         self.logic = logic
         self.hparams = hparams
@@ -204,7 +206,7 @@ class SearchlessChessAdapter(_get_base_class()):
                         break
                 import sys
                 print(
-                    f"[SC_DEBUG #{self._call_count}] "
+                    f"[SC_DEBUG {self.model_name} #{self._call_count}] "
                     f"{_elapsed:.3f}s  "
                     f"FEN={board.fen()[:60]}  "
                     f"best={best_uci} (p={policies[i][best_action]:.3f})  "
@@ -412,4 +414,5 @@ def load_for_arena(
         player_white=player_white,
         player_black=player_black,
         debug=debug,
+        model_name=model_name,
     )

@@ -263,9 +263,17 @@ class SearchlessChessAdapter(_get_base_class()):
 
             # Model always outputs win% from White's perspective.
             # When it's Black's turn, invert so we rank moves from Black's perspective.
+            best_before = float(np.max(win_probs))
             if is_black:
                 win_probs = 1.0 - win_probs
+            best_after = float(np.max(win_probs))
 
+            if self._call_count < 10:
+                import sys
+                print(f"[FLIP_DEBUG] turn={'W' if board.turn else 'B'} "
+                    f"best_before={best_before:.3f} best_after={best_after:.3f}", 
+                    file=sys.stderr)
+                
             policy = self._map_to_arena_policy(board, win_probs)
             # V(s) ≈ max_a Q(s,a), mapped from [0,1] to [-1,1]
             value = float(np.max(win_probs)) * 2.0 - 1.0

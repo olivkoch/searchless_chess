@@ -253,7 +253,7 @@ class SearchlessChessAdapter(_get_base_class()):
         moves = self._legal_moves_sorted(board)
         
         # Debug: print top 3 moves with their win_probs
-        if self._call_count < 10:
+        if self.debug and self._call_count < 10:
             top3 = sorted(zip(win_probs, moves), reverse=True)[:3]
             import sys
             print(f"[MAP_DEBUG] top3: {[(m.uci(), f'{p:.3f}') for p,m in top3]}", 
@@ -287,7 +287,7 @@ class SearchlessChessAdapter(_get_base_class()):
                 win_probs = 1.0 - win_probs
             best_after = float(np.max(win_probs))
 
-            if self._call_count < 10:
+            if self.debug and self._call_count < 10:
                 import sys
                 print(f"[FLIP_DEBUG] turn={'W' if board.turn else 'B'} "
                     f"best_before={best_before:.3f} best_after={best_after:.3f}", 

@@ -20,7 +20,10 @@ import pathlib
 from typing import Any
 
 import chex
-from grain import python as pygrain
+try:
+  from grain import python as pygrain
+except ImportError:
+  pygrain = None  # Only needed for training, not inference.
 import haiku as hk
 import jax
 from jax import numpy as jnp

@@ -202,6 +202,8 @@ def main(argv: Sequence[str]) -> None:
       file.write(str(game))
       file.write('\n\n')
 
+  _EVAL_STOCKFISH_ENGINE._raw_engine.close()
+
 
 if __name__ == '__main__':
   app.run(main)

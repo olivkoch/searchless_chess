@@ -171,6 +171,7 @@ class SearchlessChessAdapter(_get_base_class()):
         boards = batch["boards"]
         players = batch["current_player"]
         position_histories = batch.get("position_histories")  # may be None
+        plies = batch.get("plies", None)
 
         _is_tensor = torch is not None and isinstance(boards, torch.Tensor)
         if _is_tensor:
@@ -197,9 +198,10 @@ class SearchlessChessAdapter(_get_base_class()):
 
             # Per-row position count dict, or None if arena isn't tracking history.
             pos_counts = position_histories[i] if position_histories is not None else None
+            ply_i = int(plies[i]) if plies is not None else None
 
             _t0 = _time.perf_counter()
-            policies[i], values[i] = self._evaluate_position(board, pos_counts)
+            policies[i], values[i] = self._evaluate_position(board, pos_counts, ply_i)
             _elapsed = _time.perf_counter() - _t0
 
             if self.debug and self._call_count < 200:
@@ -260,10 +262,13 @@ class SearchlessChessAdapter(_get_base_class()):
         arr = chess_to_board(cb)
         return self.logic.position_hash(arr)
 
-    def _evaluate_position(self, board: chess.Board, position_counts=None):
+    def _evaluate_position(self, board: chess.Board, position_counts=None, ply=None):
         from searchless_chess.src.engines import neural_engines
         import scipy.special
-
+        if ply is not None:
+            # fullmove_number is 1 at ply 0-1, 2 at ply 2-3, etc.
+            board.fullmove_number = ply // 2 + 1
+            
         eng = self.sc_engine
 
         if isinstance(eng, neural_engines.ActionValueEngine):

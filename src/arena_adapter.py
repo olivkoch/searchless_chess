@@ -170,6 +170,7 @@ class SearchlessChessAdapter(_get_base_class()):
     def forward_for_mcts(self, batch: dict) -> dict:
         boards = batch["boards"]
         players = batch["current_player"]
+        position_histories = batch.get("position_histories")  # may be None
 
         _is_tensor = torch is not None and isinstance(boards, torch.Tensor)
         if _is_tensor:
@@ -193,8 +194,12 @@ class SearchlessChessAdapter(_get_base_class()):
             )
             if board.turn != expected_turn:
                 board.turn = expected_turn
+
+            # Per-row position count dict, or None if arena isn't tracking history.
+            pos_counts = position_histories[i] if position_histories is not None else None
+
             _t0 = _time.perf_counter()
-            policies[i], values[i] = self._evaluate_position(board)
+            policies[i], values[i] = self._evaluate_position(board, pos_counts)
             _elapsed = _time.perf_counter() - _t0
 
             if self.debug and self._call_count < 200:
@@ -248,7 +253,14 @@ class SearchlessChessAdapter(_get_base_class()):
                 policy[arena_idx] = move_probs[j]
         return policy
 
-    def _evaluate_position(self, board: chess.Board):
+    def _arena_hash_from_chess_board(self, cb: chess.Board):
+        """Compute the same hash the arena uses, from a python-chess Board."""
+        # The arena stores boards as (69,) byte arrays; convert cb → arr → hash.
+        from src.nn.kernels.chess_logic import chess_to_board  # or wherever it lives
+        arr = chess_to_board(cb)
+        return self.logic.position_hash(arr)
+
+    def _evaluate_position(self, board: chess.Board, position_counts=None):
         from searchless_chess.src.engines import neural_engines
         import scipy.special
 
@@ -260,14 +272,20 @@ class SearchlessChessAdapter(_get_base_class()):
             win_probs = np.inner(probs, eng._return_buckets_values)
                 
             moves = self._legal_moves_sorted(board)
-            for j, move in enumerate(moves):
-                board.push(move)
-                rep_claim = board.can_claim_threefold_repetition()
-                fivefold = board.is_fivefold_repetition()
-                if rep_claim or fivefold:
-                    print(f"    REP DETECTED for {move.uci()}: stack_len={len(board.move_stack)} 3-fold={rep_claim} 5-fold={fivefold}")
-                    win_probs[j] = 0.5
-                board.pop()
+
+            if position_counts is not None:
+                for j, move in enumerate(moves):
+                    board.push(move)
+                    hash_after = self._arena_hash_from_chess_board(board)
+                    # Playing this move would create the Nth occurrence where
+                    # N = prior count + 1. Threefold triggers at N == 3.
+                    if position_counts.get(hash_after, 0) + 1 >= 3:
+                        if self.debug:
+                            print(f"[REP] {self.model_name} refusing {move.uci()} -> "
+                                f"would be occurrence {position_counts.get(hash_after, 0) + 1}",
+                                file=sys.stderr)
+                        win_probs[j] = 0.5
+                    board.pop()
 
             policy = self._map_to_arena_policy(board, win_probs)
             # V(s) ≈ max_a Q(s,a), mapped from [0,1] to [-1,1]
@@ -281,12 +299,20 @@ class SearchlessChessAdapter(_get_base_class()):
             win_probs = np.inner(next_probs, eng._return_buckets_values)
 
             moves = self._legal_moves_sorted(board)
-            for j, move in enumerate(moves):
-                board.push(move)
-                if board.is_fivefold_repetition() or board.can_claim_threefold_repetition():
-                    win_probs[j] = 0.5
-                board.pop()
-            policy = self._map_to_arena_policy(board, win_probs)
+
+            if position_counts is not None:
+                for j, move in enumerate(moves):
+                    board.push(move)
+                    hash_after = self._arena_hash_from_chess_board(board)
+                    # Playing this move would create the Nth occurrence where
+                    # N = prior count + 1. Threefold triggers at N == 3.
+                    if position_counts.get(hash_after, 0) + 1 >= 3:
+                        if self.debug:
+                            print(f"[REP] {self.model_name} refusing {move.uci()} -> "
+                                f"would be occurrence {position_counts.get(hash_after, 0) + 1}",
+                                file=sys.stderr)
+                        win_probs[j] = 0.5
+                    board.pop()
             
             # Current position value.
             current_probs = np.exp(analysis["current_log_probs"])

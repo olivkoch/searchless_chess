@@ -31,7 +31,8 @@ class StockfishEngine(engine.Engine):
   ) -> None:
     self._limit = limit
     self._skill_level = None
-    bin_path = os.path.join(
+    import shutil
+    bin_path = shutil.which('stockfish') or os.path.join(
         os.getcwd(),
         '../Stockfish/src/stockfish',
     )

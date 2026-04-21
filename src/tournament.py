@@ -94,7 +94,7 @@ def _play_game(
       is_winning = score.score() > 0
     score_too_high = score.is_mate() or abs(score.score()) > _MIN_SCORE_TO_STOP
 
-    if score_too_high:
+    if False: # score_too_high:
       is_white = board.turn == chess.WHITE
       if is_white and is_winning or (not is_white and not is_winning):
         result = '1-0'

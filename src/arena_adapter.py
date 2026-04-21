@@ -268,7 +268,16 @@ class SearchlessChessAdapter(_get_base_class()):
         if ply is not None:
             # fullmove_number is 1 at ply 0-1, 2 at ply 2-3, etc.
             board.fullmove_number = ply // 2 + 1
-            
+
+        # TEMP diagnostic
+        if not hasattr(self, '_fm_diag_count'):
+            self._fm_diag_count = 0
+        self._fm_diag_count += 1
+        if self._fm_diag_count % 500 == 0:
+            print(f"[FM-DIAG] ply={ply} set fullmove={board.fullmove_number} "
+                f"halfmove={board.halfmove_clock} fen={board.fen()}", flush=True)
+        # end diagnostic
+        #   
         eng = self.sc_engine
 
         if isinstance(eng, neural_engines.ActionValueEngine):

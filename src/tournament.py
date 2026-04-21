@@ -160,7 +160,7 @@ def main(argv: Sequence[str]) -> None:
   # Encyclopedia of Chess Openings.
   openings_path = os.path.join(
       os.getcwd(),
-      '../data/eco_openings.pgn',
+      'data/eco_openings.pgn',
   )
   opening_boards = list()
 

@@ -273,6 +273,13 @@ class SearchlessChessAdapter(_get_base_class()):
                     f"best_before={best_before:.3f} best_after={best_after:.3f}", 
                     file=sys.stderr)
                 
+            moves = self._legal_moves_sorted(board)
+            for j, move in enumerate(moves):
+                board.push(move)
+                if board.is_fivefold_repetition() or board.can_claim_threefold_repetition():
+                    win_probs[j] = 0.5
+                board.pop()
+
             policy = self._map_to_arena_policy(board, win_probs)
             # V(s) ≈ max_a Q(s,a), mapped from [0,1] to [-1,1]
             value = float(np.max(win_probs)) * 2.0 - 1.0
@@ -283,6 +290,15 @@ class SearchlessChessAdapter(_get_base_class()):
             # so win_probs here already ranks moves from the current player's POV.
             next_probs = np.exp(analysis["next_log_probs"])
             win_probs = np.inner(next_probs, eng._return_buckets_values)
+
+            moves = self._legal_moves_sorted(board)
+            for j, move in enumerate(moves):
+                board.push(move)
+                if board.is_fivefold_repetition() or board.can_claim_threefold_repetition():
+                    win_probs[j] = 0.5
+                board.pop()
+            policy = self._map_to_arena_policy(board, win_probs)
+            
             policy = self._map_to_arena_policy(board, win_probs)
             # Current position value.
             current_probs = np.exp(analysis["current_log_probs"])

@@ -59,7 +59,7 @@ class Predictor:
 
 class DataLoaderBuilder(Protocol):
 
-  def __call__(self, config: config_lib.DataConfig) -> pygrain.DataLoader:
+  def __call__(self, config: config_lib.DataConfig) -> 'pygrain.DataLoader':
     """Returns a PyGrain data loader from the `config`."""
 
 
@@ -88,25 +88,28 @@ class EvaluatorBuilder(Protocol):
     """
 
 
-CODERS = {
-    'fen': coders.StrUtf8Coder(),
-    'move': coders.StrUtf8Coder(),
-    'count': coders.BigIntegerCoder(),
-    'win_prob': coders.FloatCoder(),
-}
-CODERS['state_value'] = coders.TupleCoder((
-    CODERS['fen'],
-    CODERS['win_prob'],
-))
-CODERS['action_value'] = coders.TupleCoder((
-    CODERS['fen'],
-    CODERS['move'],
-    CODERS['win_prob'],
-))
-CODERS['behavioral_cloning'] = coders.TupleCoder((
-    CODERS['fen'],
-    CODERS['move'],
-))
+if coders is not None:
+  CODERS = {
+      'fen': coders.StrUtf8Coder(),
+      'move': coders.StrUtf8Coder(),
+      'count': coders.BigIntegerCoder(),
+      'win_prob': coders.FloatCoder(),
+  }
+  CODERS['state_value'] = coders.TupleCoder((
+      CODERS['fen'],
+      CODERS['win_prob'],
+  ))
+  CODERS['action_value'] = coders.TupleCoder((
+      CODERS['fen'],
+      CODERS['move'],
+      CODERS['win_prob'],
+  ))
+  CODERS['behavioral_cloning'] = coders.TupleCoder((
+      CODERS['fen'],
+      CODERS['move'],
+  ))
+else:
+  CODERS = {}
 
 
 class BehavioralCloningData(NamedTuple):

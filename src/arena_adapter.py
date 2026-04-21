@@ -262,7 +262,10 @@ class SearchlessChessAdapter(_get_base_class()):
             moves = self._legal_moves_sorted(board)
             for j, move in enumerate(moves):
                 board.push(move)
-                if board.is_fivefold_repetition() or board.can_claim_threefold_repetition():
+                rep_claim = board.can_claim_threefold_repetition()
+                fivefold = board.is_fivefold_repetition()
+                if rep_claim or fivefold:
+                    print(f"    REP DETECTED for {move.uci()}: stack_len={len(board.move_stack)} 3-fold={rep_claim} 5-fold={fivefold}")
                     win_probs[j] = 0.5
                 board.pop()
 

@@ -37,6 +37,7 @@ import os
 import sys
 import types as _types
 from typing import Callable, Dict, Optional
+import scipy.special
 
 import numpy as np
 
@@ -237,35 +238,14 @@ class SearchlessChessAdapter(_get_base_class()):
         from searchless_chess.src.engines import engine as engine_lib
         return engine_lib.get_ordered_legal_moves(board)
 
-    # def _map_to_arena_policy(self, board, win_probs):
-    #     """Map per-legal-move scores to the arena's action space."""
-    #     policy = np.zeros(self.num_arena_actions, dtype=np.float32)
-    #     for j, move in enumerate(self._legal_moves_sorted(board)):
-    #         arena_idx = self.uci_to_arena_action.get(move.uci())
-    #         if arena_idx is not None:
-    #             policy[arena_idx] = win_probs[j]
-    #     total = policy.sum()
-    #     if total > 0:
-    #         policy /= total
-    #     return policy
-    def _map_to_arena_policy(self, board, win_probs):
+    def _map_to_arena_policy(self, board, win_probs, temperature=0.01):
         policy = np.zeros(self.num_arena_actions, dtype=np.float32)
         moves = self._legal_moves_sorted(board)
-        
-        # Debug: print top 3 moves with their win_probs
-        if self.debug and self._call_count < 10:
-            top3 = sorted(zip(win_probs, moves), reverse=True)[:3]
-            import sys
-            print(f"[MAP_DEBUG] top3: {[(m.uci(), f'{p:.3f}') for p,m in top3]}", 
-                file=sys.stderr)
-        
+        move_probs = scipy.special.softmax(np.asarray(win_probs) / temperature)
         for j, move in enumerate(moves):
             arena_idx = self.uci_to_arena_action.get(move.uci())
             if arena_idx is not None:
-                policy[arena_idx] = win_probs[j]
-        total = policy.sum()
-        if total > 0:
-            policy /= total
+                policy[arena_idx] = move_probs[j]
         return policy
 
     def _evaluate_position(self, board: chess.Board):

@@ -194,7 +194,7 @@ def main(argv: Sequence[str]) -> None:
 
   games = _run_tournament(engines=engines, opening_boards=opening_boards)
 
-  games_path = os.path.join(os.getcwd(), '../data/tournament_games.pgn')
+  games_path = os.path.join(os.getcwd(), 'data/tournament_games.pgn')
 
   print(f'Writing games to {games_path}')
   with open(games_path, 'w') as file:

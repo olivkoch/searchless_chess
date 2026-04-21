@@ -358,7 +358,7 @@ def build_evaluator(
       # required information for all the metrics.
       dataset_path=os.path.join(
           os.getcwd(),
-          f'../data/{config.data.split}/action_value_data.bag',
+          f'data/{config.data.split}/action_value_data.bag',
       ),
       num_return_buckets=config.num_return_buckets,
       num_eval_data=config.num_eval_data,

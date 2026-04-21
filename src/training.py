@@ -95,7 +95,7 @@ def train(
     logging.info('Initializing the checkpoint manager.')
     checkpoint_dir = os.path.join(
         os.getcwd(),
-        f'../checkpoints/local/{train_config.data.policy}',
+        f'checkpoints/local/{train_config.data.policy}',
     )
     checkpoint_manager = training_utils.get_checkpoint_manager(
         ckpt_frequency=train_config.ckpt_frequency,

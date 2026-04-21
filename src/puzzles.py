@@ -100,7 +100,7 @@ def main(argv: Sequence[str]) -> None:
 
   puzzles_path = os.path.join(
       os.getcwd(),
-      '../data/puzzles.csv',
+      'data/puzzles.csv',
   )
   puzzles = pd.read_csv(puzzles_path, nrows=_NUM_PUZZLES.value)
   engine = constants.ENGINE_BUILDERS[_AGENT.value]()

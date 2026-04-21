@@ -134,7 +134,7 @@ def build_data_loader(config: config_lib.DataConfig) -> pygrain.DataLoader:
   data_source = bagz.BagDataSource(
       os.path.join(
           os.getcwd(),
-          f'../data/{config.split}/{config.policy}_data.bag',
+          f'data/{config.split}/{config.policy}_data.bag',
       ),
   )
 

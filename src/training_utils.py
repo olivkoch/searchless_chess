@@ -193,10 +193,10 @@ def restore_checkpoint(
     params: hk.Params,
     params_ema: hk.Params,
     opt_state: optax.OptState,
-    data_iter: pygrain.PyGrainDatasetIterator,
+    data_iter: 'pygrain.PyGrainDatasetIterator',
     sharding: 'jax.sharding.PositionalSharding',
 ) -> tuple[
-    hk.Params, hk.Params, optax.OptState, pygrain.PyGrainDatasetIterator
+    hk.Params, hk.Params, optax.OptState, 'pygrain.PyGrainDatasetIterator'
 ]:
   """Returns the restored params and optimizer state from a checkpoint."""
 

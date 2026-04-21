@@ -253,7 +253,6 @@ class SearchlessChessAdapter(_get_base_class()):
         import scipy.special
 
         eng = self.sc_engine
-        is_black = not board.turn
 
         if isinstance(eng, neural_engines.ActionValueEngine):
             analysis = eng.analyse(board)
@@ -286,12 +285,9 @@ class SearchlessChessAdapter(_get_base_class()):
                 board.pop()
             policy = self._map_to_arena_policy(board, win_probs)
             
-            policy = self._map_to_arena_policy(board, win_probs)
             # Current position value.
             current_probs = np.exp(analysis["current_log_probs"])
             current_value = float(np.inner(current_probs, eng._return_buckets_values))
-            if is_black:
-                current_value = 1.0 - current_value
             value = current_value * 2.0 - 1.0
 
         elif isinstance(eng, neural_engines.BCEngine):

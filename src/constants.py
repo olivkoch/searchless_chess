@@ -20,8 +20,14 @@ from collections.abc import Callable, Mapping
 import dataclasses
 from typing import Any, NamedTuple, Protocol
 
-from apache_beam import coders
-from grain import python as pygrain
+try:
+  from apache_beam import coders
+except ImportError:
+  coders = None  # Only needed for data processing, not inference.
+try:
+  from grain import python as pygrain
+except ImportError:
+  pygrain = None  # Only needed for training, not inference.
 import haiku as hk
 import jaxtyping as jtp
 

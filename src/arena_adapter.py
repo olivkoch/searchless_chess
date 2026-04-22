@@ -173,6 +173,21 @@ class SearchlessChessAdapter(_get_base_class()):
         position_histories = batch.get("position_histories")  # may be None
         plies = batch.get("plies", None)
 
+        # --- DIAGNOSTIC PROBE ---
+        if position_histories is not None:
+            # Check if any game in the batch has a history longer than 1 (initial state)
+            history_depths = [len(h) for h in position_histories if h is not None]
+            if any(d > 1 for d in history_depths):
+                # Print only occasionally to avoid spamming
+                if getattr(self, '_diag_count', 0) % 100 == 0:
+                    print(f"DEBUG: Adapter received history. Max depth: {max(history_depths)}")
+                self._diag_count = getattr(self, '_diag_count', 0) + 1
+        else:
+            if getattr(self, '_diag_err_count', 0) % 100 == 0:
+                print("DEBUG: CRITICAL - Adapter received NO position_histories!")
+            self._diag_err_count = getattr(self, '_diag_err_count', 0) + 1
+        # --- END PROBE ---
+        
         _is_tensor = torch is not None and isinstance(boards, torch.Tensor)
         if _is_tensor:
             boards_np = boards.cpu().numpy()

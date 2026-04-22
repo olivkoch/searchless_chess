@@ -182,7 +182,7 @@ def main(argv: Sequence[str]) -> None:
       agent: constants.ENGINE_BUILDERS[agent]()
       for agent in [
           '9M',
-          '136M',
+          # '136M',
           '270M',
           # 'stockfish',
           # 'stockfish_all_moves',

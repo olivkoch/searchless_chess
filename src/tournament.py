@@ -70,8 +70,10 @@ def _play_game(
   white_player = engines_names.index(white_name)
   current_player = white_player if initial_board.turn else 1 - white_player
   board = initial_board
+  opening_fen = board.fen()
   result = None
-  print(f'Starting FEN: {board.fen()}')
+  moves_played = []
+  print(f'Starting FEN: {opening_fen}')
 
   while not (
       board.is_game_over()
@@ -82,6 +84,7 @@ def _play_game(
     print(f'Best move: {best_move.uci()}')
 
     # Push move to the game.
+    moves_played.append(best_move)
     board.push(best_move)
     current_player = 1 - current_player
 
@@ -103,7 +106,12 @@ def _play_game(
       break
   print(f'End FEN: {board.fen()}')
 
-  game = chess.pgn.Game.from_board(board)
+  game = chess.pgn.Game()
+  game.setup(opening_fen)
+  game.headers['SetUp'] = 'DeepMind'
+  node = game
+  for move in moves_played:
+    node = node.add_variation(move)
   game.headers['Event'] = 'UAIChess'
   game.headers['Date'] = datetime.datetime.today().strftime('%Y.%m.%d')
   game.headers['White'] = white_name

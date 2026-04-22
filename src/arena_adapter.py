@@ -299,7 +299,20 @@ class SearchlessChessAdapter(_get_base_class()):
                 for j, move in enumerate(moves):
                     board.push(move)
                     hash_after = self._arena_hash_from_chess_board(board)
-                    if position_counts.get(hash_after, 0) + 1 >= 3:
+                    prior_count = position_counts.get(hash_after, 0)
+        
+                    # Diagnostic
+                    if not hasattr(self, "_rep_diag"):
+                        self._rep_diag = {"total_checks": 0, "fired": 0, "dict_size_seen": []}
+                    self._rep_diag["total_checks"] += 1
+                    if prior_count >= 1:  # position seen once before, interesting
+                        self._rep_diag["fired"] += 1
+                    if self._rep_diag["total_checks"] % 10000 == 0:
+                        print(f"[REP-DIAG] checks={self._rep_diag['total_checks']}  "
+                            f"candidates_with_prior_count≥1={self._rep_diag['fired']}  "
+                            f"dict_size_example={len(position_counts)}", flush=True)
+                    
+                    if prior_count + 1 >= 3:
                         win_probs[j] = 0.5
                     board.pop()
 
@@ -321,7 +334,20 @@ class SearchlessChessAdapter(_get_base_class()):
                 for j, move in enumerate(moves):
                     board.push(move)
                     hash_after = self._arena_hash_from_chess_board(board)
-                    if position_counts.get(hash_after, 0) + 1 >= 3:
+                    prior_count = position_counts.get(hash_after, 0)
+        
+                    # Diagnostic
+                    if not hasattr(self, "_rep_diag"):
+                        self._rep_diag = {"total_checks": 0, "fired": 0, "dict_size_seen": []}
+                    self._rep_diag["total_checks"] += 1
+                    if prior_count >= 1:  # position seen once before, interesting
+                        self._rep_diag["fired"] += 1
+                    if self._rep_diag["total_checks"] % 10000 == 0:
+                        print(f"[REP-DIAG] checks={self._rep_diag['total_checks']}  "
+                            f"candidates_with_prior_count≥1={self._rep_diag['fired']}  "
+                            f"dict_size_example={len(position_counts)}", flush=True)
+                    
+                    if prior_count + 1 >= 3:
                         win_probs[j] = 0.5
                     board.pop()
 

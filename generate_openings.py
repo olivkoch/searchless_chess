@@ -11,7 +11,6 @@ with open(filename) as f: # typically, input data/eco_openings.pgn
         opening_boards.append(game.end().board())
 
 rng = np.random.default_rng(seed=1)
-n_games = 1000  # your tournament size
 opening_indices = rng.choice(
     np.arange(len(opening_boards)),
     size=n_games // 2,
@@ -19,7 +18,7 @@ opening_indices = rng.choice(
 )
 selected = [opening_boards[i] for i in opening_indices]
 
-with open(os.path.expanduser("~/alphazero/dm_book.fen"), "w") as f:
+with open(os.path.expanduser(output), "w") as f:
     for b in selected:
         f.write(b.fen() + "\n")
 

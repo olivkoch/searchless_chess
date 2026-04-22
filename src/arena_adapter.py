@@ -255,6 +255,14 @@ class SearchlessChessAdapter(_get_base_class()):
                 policy[arena_idx] = move_probs[j]
         return policy
 
+    def _map_to_arena_policy_onehot(self, chosen_move):
+        """Emit a one-hot arena policy on the adapter's chosen move."""
+        policy = np.zeros(self.num_arena_actions, dtype=np.float32)
+        arena_idx = self.uci_to_arena_action.get(chosen_move.uci())
+        if arena_idx is not None:
+            policy[arena_idx] = 1.0
+        return policy
+
     def _arena_hash_from_chess_board(self, cb: chess.Board):
         """Compute the same hash the arena uses, from a python-chess Board."""
         # The arena stores boards as (69,) byte arrays; convert cb → arr → hash.
@@ -269,14 +277,14 @@ class SearchlessChessAdapter(_get_base_class()):
             # fullmove_number is 1 at ply 0-1, 2 at ply 2-3, etc.
             board.fullmove_number = ply // 2 + 1
 
-        # TEMP diagnostic
-        if not hasattr(self, '_fm_diag_count'):
-            self._fm_diag_count = 0
-        self._fm_diag_count += 1
-        if self._fm_diag_count % 500 == 0:
-            print(f"[FM-DIAG] ply={ply} set fullmove={board.fullmove_number} "
-                f"halfmove={board.halfmove_clock} fen={board.fen()}", flush=True)
-        # end diagnostic
+        # # TEMP diagnostic
+        # if not hasattr(self, '_fm_diag_count'):
+        #     self._fm_diag_count = 0
+        # self._fm_diag_count += 1
+        # if self._fm_diag_count % 500 == 0:
+        #     print(f"[FM-DIAG] ply={ply} set fullmove={board.fullmove_number} "
+        #         f"halfmove={board.halfmove_clock} fen={board.fen()}", flush=True)
+        # # end diagnostic
         #   
         eng = self.sc_engine
 
@@ -291,18 +299,13 @@ class SearchlessChessAdapter(_get_base_class()):
                 for j, move in enumerate(moves):
                     board.push(move)
                     hash_after = self._arena_hash_from_chess_board(board)
-                    # Playing this move would create the Nth occurrence where
-                    # N = prior count + 1. Threefold triggers at N == 3.
                     if position_counts.get(hash_after, 0) + 1 >= 3:
-                        if self.debug:
-                            print(f"[REP] {self.model_name} refusing {move.uci()} -> "
-                                f"would be occurrence {position_counts.get(hash_after, 0) + 1}",
-                                file=sys.stderr)
                         win_probs[j] = 0.5
                     board.pop()
 
-            policy = self._map_to_arena_policy(board, win_probs)
-            # V(s) ≈ max_a Q(s,a), mapped from [0,1] to [-1,1]
+            # Match DM's tie-break: argmax over moves in get_ordered_legal_moves order.
+            best_index = int(np.argmax(win_probs))
+            policy = self._map_to_arena_policy_onehot(moves[best_index])
             value = float(np.max(win_probs)) * 2.0 - 1.0
 
         elif isinstance(eng, neural_engines.StateValueEngine):
@@ -318,17 +321,12 @@ class SearchlessChessAdapter(_get_base_class()):
                 for j, move in enumerate(moves):
                     board.push(move)
                     hash_after = self._arena_hash_from_chess_board(board)
-                    # Playing this move would create the Nth occurrence where
-                    # N = prior count + 1. Threefold triggers at N == 3.
                     if position_counts.get(hash_after, 0) + 1 >= 3:
-                        if self.debug:
-                            print(f"[REP] {self.model_name} refusing {move.uci()} -> "
-                                f"would be occurrence {position_counts.get(hash_after, 0) + 1}",
-                                file=sys.stderr)
                         win_probs[j] = 0.5
                     board.pop()
-            
-            # Current position value.
+
+            best_index = int(np.argmax(win_probs))
+            policy = self._map_to_arena_policy_onehot(moves[best_index])
             current_probs = np.exp(analysis["current_log_probs"])
             current_value = float(np.inner(current_probs, eng._return_buckets_values))
             value = current_value * 2.0 - 1.0

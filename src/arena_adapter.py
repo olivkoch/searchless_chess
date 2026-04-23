@@ -332,15 +332,45 @@ class SearchlessChessAdapter(_get_base_class()):
                     adapter_says_rep = (prior_count + 1 >= 3)
                     dm_says_rep = board.can_claim_threefold_repetition()
                     if adapter_says_rep != dm_says_rep:
-                        pc_true_count = board.is_repetition(1)      # True iff seen ≥1 time including current
-                        pc_rep2 = board.is_repetition(2)            # True iff seen ≥2 times
-                        pc_rep3 = board.is_repetition(3)            # True iff seen ≥3 times
-                        print(f"REP-DISAGREE move={move.uci()} "
-                            f"adapter={adapter_says_rep} dm={dm_says_rep} "
+                        pc_key = board._transposition_key()
+
+                        # Find other entries in position_counts that collide (same bytes)
+                        # by scanning. Small dicts, this is fine.
+                        collisions = [k for k in position_counts if k == hash_after]
+
+                        print(f"REP-DISAGREE-DETAIL move={move.uci()} "
+                            f"adapter_hash={hash_after!r} "
                             f"adapter_dict_count={prior_count} "
-                            f"pc_rep1={pc_rep2} pc_rep2={pc_rep2} pc_rep3={pc_rep3} "
-                            f"castling={board.castling_xfen()} ep={board.ep_square}",
+                            f"collisions_found={len(collisions)} "
+                            f"pc_seen_any={board.is_repetition(1)} "
+                            f"pc_key={pc_key!r} "
+                            f"fen={board.fen()} "
+                            f"turn={'w' if board.turn else 'b'} "
+                            f"castling={board.castling_xfen()} "
+                            f"ep_square={board.ep_square} "
+                            f"has_legal_ep={board.has_legal_en_passant()} "
+                            f"halfmove={board.halfmove_clock}",
                             flush=True)
+
+                        # One-shot: dump the whole dict and the adapter_hash to a file
+                        # so we can diff it offline.
+                        if not getattr(self, "_dumped_full_dict", False):
+                            import json, base64
+                            self._dumped_full_dict = True
+                            with open("/tmp/rep_disagree_dict.json", "w") as f:
+                                json.dump({
+                                    "adapter_hash_b64":
+                                        base64.b64encode(hash_after).decode() if isinstance(hash_after, bytes)
+                                        else str(hash_after),
+                                    "current_fen": board.fen(),
+                                    "current_pc_key": repr(pc_key),
+                                    "dict_keys_b64": [
+                                        base64.b64encode(k).decode() if isinstance(k, bytes) else str(k)
+                                        for k in position_counts.keys()
+                                    ],
+                                    "moves_played_this_game": None,  # fill later if you want
+                                }, f, indent=2)
+                            print("[DUMP] full dict -> /tmp/rep_disagree_dict.json", flush=True)
 
                     # Diagnostic
                     if not hasattr(self, "_rep_diag"):

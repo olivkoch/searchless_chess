@@ -315,7 +315,13 @@ class SearchlessChessAdapter(_get_base_class()):
                     board.push(move)
                     hash_after = self._arena_hash_from_chess_board(board)
                     prior_count = position_counts.get(hash_after, 0)
-        
+
+                    adapter_says_rep = (prior_count + 1 >= 3)
+                    dm_says_rep = board.can_claim_threefold_repetition()
+                    if adapter_says_rep != dm_says_rep:
+                        print(f"REP-DISAGREE move={move.uci()} adapter={adapter_says_rep} dm={dm_says_rep} "
+                            f"dict_count={prior_count} castling={board.castling_xfen()} ep={board.ep_square}")
+
                     # Diagnostic
                     if not hasattr(self, "_rep_diag"):
                         self._rep_diag = {"total_checks": 0, "fired": 0, "dict_size_seen": []}
@@ -351,6 +357,12 @@ class SearchlessChessAdapter(_get_base_class()):
                     hash_after = self._arena_hash_from_chess_board(board)
                     prior_count = position_counts.get(hash_after, 0)
         
+                    adapter_says_rep = (prior_count + 1 >= 3)
+                    dm_says_rep = board.can_claim_threefold_repetition()
+                    if adapter_says_rep != dm_says_rep:
+                        print(f"REP-DISAGREE move={move.uci()} adapter={adapter_says_rep} dm={dm_says_rep} "
+                            f"dict_count={prior_count} castling={board.castling_xfen()} ep={board.ep_square}")
+
                     # Diagnostic
                     if not hasattr(self, "_rep_diag"):
                         self._rep_diag = {"total_checks": 0, "fired": 0, "dict_size_seen": []}

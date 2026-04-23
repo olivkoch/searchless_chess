@@ -348,7 +348,7 @@ class SearchlessChessAdapter(_get_base_class()):
                     if bucket > self._rep_diag["last_size_bucket"]:
                         self._rep_diag["last_size_bucket"] = bucket
                         print(f"[REP-DIAG] dict_size={size}  "
-                            f"cum_checks={self._rep_diag['checks']}  "
+                            f"cum_checks={self._rep_diag['total_checks']}  "
                             f"cum_hits={self._rep_diag['fired']}", flush=True)
                     
                     if prior_count + 1 >= 3:
@@ -407,7 +407,7 @@ class SearchlessChessAdapter(_get_base_class()):
                     if bucket > self._rep_diag["last_size_bucket"]:
                         self._rep_diag["last_size_bucket"] = bucket
                         print(f"[REP-DIAG] dict_size={size}  "
-                            f"cum_checks={self._rep_diag['checks']}  "
+                            f"cum_checks={self._rep_diag['total_checks']}  "
                             f"cum_hits={self._rep_diag['fired']}", flush=True)
                                 
                     if prior_count + 1 >= 3:

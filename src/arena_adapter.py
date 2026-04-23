@@ -332,23 +332,16 @@ class SearchlessChessAdapter(_get_base_class()):
                     adapter_says_rep = (prior_count + 1 >= 3)
                     dm_says_rep = board.can_claim_threefold_repetition()
                     if adapter_says_rep != dm_says_rep:
-                        pc_key = board._transposition_key()
-
-                        # Find other entries in position_counts that collide (same bytes)
-                        # by scanning. Small dicts, this is fine.
-                        collisions = [k for k in position_counts if k == hash_after]
-
-                        print(f"REP-DISAGREE-DETAIL move={move.uci()} "
-                            f"adapter_hash={hash_after!r} "
+                        pc_rep1 = board.is_repetition(1)
+                        pc_rep2 = board.is_repetition(2)
+                        pc_rep3 = board.is_repetition(3)
+                        pc_key  = board._transposition_key()
+                        print(f"REP-DISAGREE move={move.uci()} "
                             f"adapter_dict_count={prior_count} "
-                            f"collisions_found={len(collisions)} "
-                            f"pc_seen_any={board.is_repetition(1)} "
+                            f"pc_rep1={pc_rep1} pc_rep2={pc_rep2} pc_rep3={pc_rep3} "
+                            f"dm_claim={board.can_claim_threefold_repetition()} "
                             f"pc_key={pc_key!r} "
                             f"fen={board.fen()} "
-                            f"turn={'w' if board.turn else 'b'} "
-                            f"castling={board.castling_xfen()} "
-                            f"ep_square={board.ep_square} "
-                            f"has_legal_ep={board.has_legal_en_passant()} "
                             f"halfmove={board.halfmove_clock}",
                             flush=True)
 
@@ -371,8 +364,6 @@ class SearchlessChessAdapter(_get_base_class()):
                                     "moves_played_this_game": None,  # fill later if you want
                                 }, f, indent=2)
                             print("[DUMP] full dict -> /tmp/rep_disagree_dict.json", flush=True)
-                            print(f"[HASH-PARTS] piece_placement_bytes[60:66]={hash_after[0][60:].hex()} "
-                                    f"side_to_move={hash_after[1]}", flush=True)
 
                     # Diagnostic
                     if not hasattr(self, "_rep_diag"):

@@ -172,7 +172,12 @@ class SearchlessChessAdapter(_get_base_class()):
         players = batch["current_player"]
         position_histories = batch.get("position_histories")  # may be None
         plies = batch.get("plies", None)
-
+        # NEW: game move history (list of UCI strings) + opening FEN per game.
+        # Used to reconstruct a python-chess board with a populated move_stack
+        # so is_repetition() works correctly for diagnostics.
+        move_histories   = batch.get("move_histories", None)
+        opening_fens     = batch.get("opening_fens", None)
+        
         # --- DIAGNOSTIC PROBE ---
         if position_histories is not None:
             # Check if any game in the batch has a history longer than 1 (initial state)
@@ -215,6 +220,21 @@ class SearchlessChessAdapter(_get_base_class()):
             pos_counts = position_histories[i] if position_histories is not None else None
             ply_i = int(plies[i]) if plies is not None else None
 
+            # NEW: build a python-chess Board WITH move_stack for accurate is_repetition().
+            # Falls back to None if the arena didn't pass history (older callers).
+            hist_board = None
+            if move_histories is not None and opening_fens is not None:
+                opening_fen = opening_fens[i]
+                mv_list     = move_histories[i] or []
+                if opening_fen is not None:
+                    hist_board = chess.Board(opening_fen)
+                    for uci in mv_list:
+                        try:
+                            hist_board.push_uci(uci)
+                        except Exception:
+                            hist_board = None
+                            break
+                        
             _t0 = _time.perf_counter()
             policies[i], values[i] = self._evaluate_position(board, pos_counts, ply_i)
             _elapsed = _time.perf_counter() - _t0
@@ -289,7 +309,11 @@ class SearchlessChessAdapter(_get_base_class()):
         arr = self.logic.chess_to_board(cb)
         return self.logic.position_hash(arr)
 
-    def _evaluate_position(self, board: chess.Board, position_counts=None, ply=None):
+    def _evaluate_position(self, board: chess.Board, 
+                           position_counts=None, 
+                           ply=None, 
+                           hist_board: chess.Board | None = None):
+        
         from searchless_chess.src.engines import neural_engines
         import scipy.special
         if ply is not None:
@@ -335,55 +359,25 @@ class SearchlessChessAdapter(_get_base_class()):
                         self._hash_diag_done = True
 
                     adapter_says_rep = (prior_count + 1 >= 3)
-                    dm_says_rep = board.can_claim_threefold_repetition()
-                    if adapter_says_rep != dm_says_rep:
-                        pc_rep1 = board.is_repetition(1)
-                        pc_rep2 = board.is_repetition(2)
-                        pc_rep3 = board.is_repetition(3)
-                        pc_key  = board._transposition_key()
+                    # Real ground-truth rep check, using the history-carrying board.
+                    dm_says_rep = False
+                    pc_rep1 = pc_rep2 = pc_rep3 = None
+                    if hist_board is not None:
+                        hist_board.push(move)
+                        pc_rep1 = hist_board.is_repetition(1)
+                        pc_rep2 = hist_board.is_repetition(2)
+                        pc_rep3 = hist_board.is_repetition(3)
+                        dm_says_rep = hist_board.can_claim_threefold_repetition()
+                        hist_board.pop()
+
+                    if hist_board is not None and adapter_says_rep != dm_says_rep:
                         print(f"REP-DISAGREE move={move.uci()} "
                             f"adapter_dict_count={prior_count} "
                             f"pc_rep1={pc_rep1} pc_rep2={pc_rep2} pc_rep3={pc_rep3} "
-                            f"dm_claim={board.can_claim_threefold_repetition()} "
-                            f"pc_key={pc_key!r} "
-                            f"fen={board.fen()} "
-                            f"halfmove={board.halfmove_clock}",
+                            f"dm_claim={dm_says_rep} "
+                            f"fen={board.fen()}",
                             flush=True)
 
-                        # One-shot: dump the whole dict and the adapter_hash to a file
-                        # so we can diff it offline.
-                        if not getattr(self, "_dumped_full_dict", False):
-                            import json, base64
-                            self._dumped_full_dict = True
-                            with open("/tmp/rep_disagree_dict.json", "w") as f:
-                                json.dump({
-                                    "adapter_hash_b64":
-                                        base64.b64encode(hash_after).decode() if isinstance(hash_after, bytes)
-                                        else str(hash_after),
-                                    "current_fen": board.fen(),
-                                    "current_pc_key": repr(pc_key),
-                                    "dict_keys_b64": [
-                                        base64.b64encode(k).decode() if isinstance(k, bytes) else str(k)
-                                        for k in position_counts.keys()
-                                    ],
-                                    "moves_played_this_game": None,  # fill later if you want
-                                }, f, indent=2)
-                            print("[DUMP] full dict -> /tmp/rep_disagree_dict.json", flush=True)
-
-                    # Diagnostic
-                    if not hasattr(self, "_rep_diag"):
-                        self._rep_diag = {"total_checks": 0, "fired": 0, "last_size_bucket": 0}
-                    self._rep_diag["total_checks"] += 1
-                    if prior_count >= 1:  # position seen once before, interesting
-                        self._rep_diag["fired"] += 1
-                    size = len(position_counts)
-                    bucket = size // 25
-                    if bucket > self._rep_diag["last_size_bucket"]:
-                        self._rep_diag["last_size_bucket"] = bucket
-                        print(f"[REP-DIAG] dict_size={size}  "
-                            f"cum_checks={self._rep_diag['total_checks']}  "
-                            f"cum_hits={self._rep_diag['fired']}", flush=True)
-                    
                     if prior_count + 1 >= 3:
                         win_probs[j] = 0.5
                     board.pop()

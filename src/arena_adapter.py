@@ -371,6 +371,8 @@ class SearchlessChessAdapter(_get_base_class()):
                                     "moves_played_this_game": None,  # fill later if you want
                                 }, f, indent=2)
                             print("[DUMP] full dict -> /tmp/rep_disagree_dict.json", flush=True)
+                            print(f"[HASH-PARTS] piece_placement_bytes[60:66]={hash_after[0][60:].hex()} "
+                                    f"side_to_move={hash_after[1]}", flush=True)
 
                     # Diagnostic
                     if not hasattr(self, "_rep_diag"):

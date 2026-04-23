@@ -281,6 +281,11 @@ class SearchlessChessAdapter(_get_base_class()):
     def _arena_hash_from_chess_board(self, cb: chess.Board):
         """Compute the same hash the arena uses, from a python-chess Board."""
         # The arena stores boards as (69,) byte arrays; convert cb → arr → hash.
+        if not hasattr(self, '_hash_id_logged'):
+            self._hash_id_logged = True
+            print(f"[LOGIC-IDENTITY-ADAPTER] logic={self.logic.__name__}  "
+                f"hash_fn_id={id(self.logic.position_hash)}", flush=True)
+            
         arr = self.logic.chess_to_board(cb)
         return self.logic.position_hash(arr)
 

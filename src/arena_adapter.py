@@ -339,7 +339,7 @@ class SearchlessChessAdapter(_get_base_class()):
 
                     # Diagnostic
                     if not hasattr(self, "_rep_diag"):
-                        self._rep_diag = {"total_checks": 0, "fired": 0, "last_size_bucket": []}
+                        self._rep_diag = {"total_checks": 0, "fired": 0, "last_size_bucket": 0}
                     self._rep_diag["total_checks"] += 1
                     if prior_count >= 1:  # position seen once before, interesting
                         self._rep_diag["fired"] += 1
@@ -398,7 +398,7 @@ class SearchlessChessAdapter(_get_base_class()):
 
                     # Diagnostic
                     if not hasattr(self, "_rep_diag"):
-                        self._rep_diag = {"total_checks": 0, "fired": 0, "last_size_bucket": []}
+                        self._rep_diag = {"total_checks": 0, "fired": 0, "last_size_bucket": 0}
                     self._rep_diag["total_checks"] += 1
                     if prior_count >= 1:  # position seen once before, interesting
                         self._rep_diag["fired"] += 1

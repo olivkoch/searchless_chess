@@ -118,6 +118,7 @@ def _play_game(
   game.headers['Black'] = engines_names[1 - white_player]
   if result is not None:  # Due to early stopping.
     game.headers['Result'] = result
+    game.headers['Termination'] = 'adjudication'
   else:
     game.headers['Result'] = board.result(claim_draw=True)
   return game

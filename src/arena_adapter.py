@@ -281,13 +281,11 @@ class SearchlessChessAdapter(_get_base_class()):
     def _arena_hash_from_chess_board(self, cb: chess.Board):
         """Compute the same hash the arena uses, from a python-chess Board."""
         # The arena stores boards as (69,) byte arrays; convert cb → arr → hash.
-        from src.nn.kernels.chess_logic import chess_to_board  # or wherever it lives
-        arr = chess_to_board(cb)
+        arr = self.logic.chess_to_board(cb)
         return self.logic.position_hash(arr)
 
     def _evaluate_position(self, board: chess.Board, position_counts=None, ply=None):
         from searchless_chess.src.engines import neural_engines
-        from src.nn.kernels.chess_logic import chess_to_board
         import scipy.special
         if ply is not None:
             # fullmove_number is 1 at ply 0-1, 2 at ply 2-3, etc.
@@ -314,7 +312,7 @@ class SearchlessChessAdapter(_get_base_class()):
             if position_counts is not None:
                 for j, move in enumerate(moves):
                     board.push(move)
-                    arr_adapter = chess_to_board(board)
+                    arr_adapter = self.logic.chess_to_board(board)
                     hash_after = self._arena_hash_from_chess_board(board)
                     prior_count = position_counts.get(hash_after, 0)
 
@@ -372,7 +370,7 @@ class SearchlessChessAdapter(_get_base_class()):
             if position_counts is not None:
                 for j, move in enumerate(moves):
                     board.push(move)
-                    arr_adapter = chess_to_board(board)
+                    arr_adapter = self.logic.chess_to_board(board)
                     hash_after = self._arena_hash_from_chess_board(board)
                     prior_count = position_counts.get(hash_after, 0)
 

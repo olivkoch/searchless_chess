@@ -332,11 +332,13 @@ class SearchlessChessAdapter(_get_base_class()):
                     adapter_says_rep = (prior_count + 1 >= 3)
                     dm_says_rep = board.can_claim_threefold_repetition()
                     if adapter_says_rep != dm_says_rep:
-                        pc_key = board._transposition_key()
-                        pc_count = sum(1 for b in board._stack if b.transposition_key() == pc_key) + 1
-                        print(f"REP-DISAGREE move={move.uci()} adapter={adapter_says_rep} "
-                            f"dm={dm_says_rep} adapter_dict_count={prior_count} "
-                            f"pc_true_count={pc_count} "
+                        pc_true_count = board.is_repetition(1)      # True iff seen ≥1 time including current
+                        pc_rep2 = board.is_repetition(2)            # True iff seen ≥2 times
+                        pc_rep3 = board.is_repetition(3)            # True iff seen ≥3 times
+                        print(f"REP-DISAGREE move={move.uci()} "
+                            f"adapter={adapter_says_rep} dm={dm_says_rep} "
+                            f"adapter_dict_count={prior_count} "
+                            f"pc_rep1={pc_rep2} pc_rep2={pc_rep2} pc_rep3={pc_rep3} "
                             f"castling={board.castling_xfen()} ep={board.ep_square}",
                             flush=True)
 

@@ -287,6 +287,7 @@ class SearchlessChessAdapter(_get_base_class()):
 
     def _evaluate_position(self, board: chess.Board, position_counts=None, ply=None):
         from searchless_chess.src.engines import neural_engines
+        from src.nn.kernels.chess_logic import chess_to_board
         import scipy.special
         if ply is not None:
             # fullmove_number is 1 at ply 0-1, 2 at ply 2-3, etc.
@@ -313,8 +314,22 @@ class SearchlessChessAdapter(_get_base_class()):
             if position_counts is not None:
                 for j, move in enumerate(moves):
                     board.push(move)
+                    arr_adapter = chess_to_board(board)
                     hash_after = self._arena_hash_from_chess_board(board)
                     prior_count = position_counts.get(hash_after, 0)
+
+                    # NEW: one-shot instrumentation
+                    if (not hasattr(self, "_hash_diag_done")
+                            and len(position_counts) > 30):
+                        sample_key  = next(iter(position_counts))
+                        # dump the arena-stored array for ONE of the keys already in the dict
+                        # (we can't recover the source array from the hash, but we CAN compare
+                        #  two adapter-computed arrays against each other across calls)
+                        print(f"[HASH-DIAG] dict_size={len(position_counts)}  "
+                            f"arr_adapter[65:69]={list(arr_adapter[65:69])}  "
+                            f"hash_adapter={hash_after}  "
+                            f"sample_dict_key={sample_key}", flush=True)
+                        self._hash_diag_done = True
 
                     adapter_says_rep = (prior_count + 1 >= 3)
                     dm_says_rep = board.can_claim_threefold_repetition()
@@ -354,9 +369,24 @@ class SearchlessChessAdapter(_get_base_class()):
             if position_counts is not None:
                 for j, move in enumerate(moves):
                     board.push(move)
+                    arr_adapter = chess_to_board(board)
                     hash_after = self._arena_hash_from_chess_board(board)
                     prior_count = position_counts.get(hash_after, 0)
-        
+
+                    # NEW: one-shot instrumentation
+                    if (not hasattr(self, "_hash_diag_done")
+                            and len(position_counts) > 30):
+                        sample_key  = next(iter(position_counts))
+                        # dump the arena-stored array for ONE of the keys already in the dict
+                        # (we can't recover the source array from the hash, but we CAN compare
+                        #  two adapter-computed arrays against each other across calls)
+                        print(f"[HASH-DIAG] dict_size={len(position_counts)}  "
+                            f"arr_adapter[65:69]={list(arr_adapter[65:69])}  "
+                            f"hash_adapter={hash_after}  "
+                            f"sample_dict_key={sample_key}", flush=True)
+                        self._hash_diag_done = True
+
+
                     adapter_says_rep = (prior_count + 1 >= 3)
                     dm_says_rep = board.can_claim_threefold_repetition()
                     if adapter_says_rep != dm_says_rep:

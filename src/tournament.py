@@ -127,6 +127,16 @@ def _play_game(
     game.headers['Termination'] = 'adjudication'
   else:
     game.headers['Result'] = board.result(claim_draw=True)
+    if board.is_checkmate():
+      game.headers['Termination'] = 'checkmate'
+    elif board.is_stalemate():
+      game.headers['Termination'] = 'stalemate'
+    elif board.is_repetition():
+      game.headers['Termination'] = 'repetition'
+    elif board.can_claim_fifty_moves():
+      game.headers['Termination'] = 'fifty-move'
+    elif board.is_insufficient_material():
+      game.headers['Termination'] = 'insufficient material'
   return game
 
 

@@ -44,6 +44,11 @@ _ADJUDICATE = flags.DEFINE_boolean(
     default=True,
     help='Enable Stockfish adjudication (early stopping when |score| > 1300cp).',
 )
+_OPENINGS_PATH = flags.DEFINE_string(
+    name='openings_path',
+    default=os.path.join(os.getcwd(), 'data/eco_openings.pgn'),
+    help='Path to a PGN file of openings.',
+)
 
 # We use a stockfish engine to evaluate the current board and terminate the
 # game early if the score is high enough (i.e., _MIN_SCORE_TO_STOP).
@@ -181,15 +186,9 @@ def main(argv: Sequence[str]) -> None:
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
 
-  # To ensure variability in the games we play, we use the openings from the
-  # Encyclopedia of Chess Openings.
-  openings_path = os.path.join(
-      os.getcwd(),
-      'data/eco_openings.pgn',
-  )
   opening_boards = list()
 
-  with open(openings_path, 'r') as file:
+  with open(_OPENINGS_PATH.value, 'r') as file:
     while (game := chess.pgn.read_game(file)) is not None:
       opening_boards.append(game.end().board())
 

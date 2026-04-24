@@ -193,7 +193,7 @@ def main(argv: Sequence[str]) -> None:
     with open(openings_file, 'r') as file:
       for line in file:
         fen = line.strip()
-        if fen:
+        if fen and not fen.startswith('#'):
           opening_boards.append(chess.Board(fen))
   else:
     with open(openings_file, 'r') as file:

@@ -269,7 +269,7 @@ class SearchlessChessAdapter(_get_base_class()):
                     # push, count the virtual occurrence from our push.
                     if key_w == key_m:
                         count_w += 1
-                    if count_w >= 1:  # is_repetition(2): 1 prev + 1 now = 2
+                    if count_w >= 2:  # is_repetition(2): 2 prev + 1 now = 3
                         clamped = True
                         board.pop()
                         break

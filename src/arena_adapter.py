@@ -223,6 +223,23 @@ class SearchlessChessAdapter(_get_base_class()):
             policy /= total
         return policy
 
+    def _map_to_arena_policy_onehot(self, board, win_probs):
+        """One-hot policy: all mass on the argmax move (DM's sorted order).
+
+        DM's ``play()`` calls ``np.argmax(win_probs)`` over sorted legal
+        moves.  Normalising and re-indexing into the arena action space can
+        change which move wins on near-ties because ``np.argmax`` breaks
+        ties by choosing the lowest index.  A one-hot avoids that.
+        """
+        best_idx = int(np.argmax(win_probs))
+        sorted_moves = self._legal_moves_sorted(board)
+        best_uci = sorted_moves[best_idx].uci()
+        arena_idx = self.uci_to_arena_action.get(best_uci)
+        policy = np.zeros(self.num_arena_actions, dtype=np.float32)
+        if arena_idx is not None:
+            policy[arena_idx] = 1.0
+        return policy
+
     def _apply_repetition_penalty(
         self, board: chess.Board, win_probs: np.ndarray, position_history: dict,
     ) -> None:
@@ -291,7 +308,7 @@ class SearchlessChessAdapter(_get_base_class()):
             win_probs = np.inner(probs, eng._return_buckets_values)
             if position_history is not None:
                 self._apply_repetition_penalty(board, win_probs, position_history)
-            policy = self._map_to_arena_policy(board, win_probs)
+            policy = self._map_to_arena_policy_onehot(board, win_probs)
             # V(s) ≈ max_a Q(s,a), mapped from [0,1] to [-1,1]
             value = float(np.max(win_probs)) * 2.0 - 1.0
 
@@ -302,7 +319,7 @@ class SearchlessChessAdapter(_get_base_class()):
             win_probs = np.inner(next_probs, eng._return_buckets_values)
             if position_history is not None:
                 self._apply_repetition_penalty(board, win_probs, position_history)
-            policy = self._map_to_arena_policy(board, win_probs)
+            policy = self._map_to_arena_policy_onehot(board, win_probs)
             # Current position value.
             current_probs = np.exp(analysis["current_log_probs"])
             value = float(np.inner(current_probs, eng._return_buckets_values)) * 2.0 - 1.0

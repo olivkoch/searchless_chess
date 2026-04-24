@@ -228,10 +228,17 @@ class SearchlessChessAdapter(_get_base_class()):
     ) -> None:
         """Clamp win_probs to 0.5 for moves leading to threefold repetition.
 
-        Mirrors DM's ``_update_scores_with_repetitions``.  Instead of relying
-        on ``chess.Board.can_claim_threefold_repetition()`` (which needs a full
-        move stack), we push each legal move and check whether the resulting
-        position already has count >= 2 in our arena position_history dict.
+        Mirrors DM's ``_update_scores_with_repetitions`` which calls
+        ``board.can_claim_threefold_repetition()`` after pushing each
+        candidate move.  That python-chess method has two parts:
+
+        (a) The position after our move has occurred 3+ times in the game
+            (count in history >= 2).
+        (b) The *opponent* has any legal reply that would create a position
+            occurring 2+ times total (count in history >= 1), meaning the
+            opponent could immediately claim a draw.
+
+        We replicate both checks using the arena's position_history dict.
         """
         if self.logic is None:
             return
@@ -243,10 +250,32 @@ class SearchlessChessAdapter(_get_base_class()):
         sorted_legal_moves = engine_lib.get_ordered_legal_moves(board)
         for i, move in enumerate(sorted_legal_moves):
             board.push(move)
-            arr = chess_to_board_fn(board)
-            key = position_hash_fn(arr)
-            count = position_history.get(key, 0)
-            if count >= 2:  # would be 3rd occurrence → threefold
+            arr_m = chess_to_board_fn(board)
+            key_m = position_hash_fn(arr_m)
+            count_m = position_history.get(key_m, 0)
+
+            clamped = False
+            # Part (a): position after our move already seen 2+ times → 3rd
+            if count_m >= 2:
+                clamped = True
+            else:
+                # Part (b): opponent has any reply creating is_repetition(2)
+                for opp_move in board.legal_moves:
+                    board.push(opp_move)
+                    arr_w = chess_to_board_fn(board)
+                    key_w = position_hash_fn(arr_w)
+                    count_w = position_history.get(key_w, 0)
+                    # If opponent's reply lands on the same position as our
+                    # push, count the virtual occurrence from our push.
+                    if key_w == key_m:
+                        count_w += 1
+                    if count_w >= 1:  # is_repetition(2): 1 prev + 1 now = 2
+                        clamped = True
+                        board.pop()
+                        break
+                    board.pop()
+
+            if clamped:
                 win_probs[i] = 0.5
             board.pop()
 

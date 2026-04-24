@@ -39,6 +39,11 @@ _NUM_GAMES = flags.DEFINE_integer(
     help='The number of games to play between each pair of engines.',
     required=True,
 )
+_ADJUDICATE = flags.DEFINE_boolean(
+    name='adjudicate',
+    default=True,
+    help='Enable Stockfish adjudication (early stopping when |score| > 1300cp).',
+)
 
 # We use a stockfish engine to evaluate the current board and terminate the
 # game early if the score is high enough (i.e., _MIN_SCORE_TO_STOP).
@@ -89,21 +94,22 @@ def _play_game(
     current_player = 1 - current_player
 
     # We analyse the board once the last move is done and pushed.
-    info = _EVAL_STOCKFISH_ENGINE.analyse(board)
-    score = info['score'].relative
-    if score.is_mate():
-      is_winning = score.mate() > 0
-    else:
-      is_winning = score.score() > 0
-    score_too_high = score.is_mate() or abs(score.score()) > _MIN_SCORE_TO_STOP
-
-    if score_too_high:
-      is_white = board.turn == chess.WHITE
-      if is_white and is_winning or (not is_white and not is_winning):
-        result = '1-0'
+    if _ADJUDICATE.value:
+      info = _EVAL_STOCKFISH_ENGINE.analyse(board)
+      score = info['score'].relative
+      if score.is_mate():
+        is_winning = score.mate() > 0
       else:
-        result = '0-1'
-      break
+        is_winning = score.score() > 0
+      score_too_high = score.is_mate() or abs(score.score()) > _MIN_SCORE_TO_STOP
+
+      if score_too_high:
+        is_white = board.turn == chess.WHITE
+        if is_white and is_winning or (not is_white and not is_winning):
+          result = '1-0'
+        else:
+          result = '0-1'
+        break
   print(f'End FEN: {board.fen()}')
 
   game = chess.pgn.Game()

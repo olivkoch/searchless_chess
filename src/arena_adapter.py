@@ -165,6 +165,8 @@ class SearchlessChessAdapter(_get_base_class()):
         boards = batch["boards"]
         players = batch["current_player"]
         position_histories = batch.get("position_histories")
+        move_histories = batch.get("move_histories")
+        opening_fens = batch.get("opening_fens")
 
         _is_tensor = torch is not None and isinstance(boards, torch.Tensor)
         if _is_tensor:
@@ -181,12 +183,24 @@ class SearchlessChessAdapter(_get_base_class()):
         values = np.zeros(B, dtype=np.float32)
 
         for i in range(B):
-            board = self.board_to_chess_fn(boards_np[i])
-            expected_turn = (
-                chess.WHITE if players_np[i] == self.player_white else chess.BLACK
-            )
-            if board.turn != expected_turn:
-                board.turn = expected_turn
+            # Reconstruct via move history when available so the FEN
+            # includes the correct fullmove_number (the DM tokenizer
+            # encodes it, and board_to_chess always sets it to 1).
+            if (
+                move_histories is not None
+                and opening_fens is not None
+                and opening_fens[i] is not None
+            ):
+                board = chess.Board(opening_fens[i])
+                for uci in move_histories[i]:
+                    board.push_uci(uci)
+            else:
+                board = self.board_to_chess_fn(boards_np[i])
+                expected_turn = (
+                    chess.WHITE if players_np[i] == self.player_white else chess.BLACK
+                )
+                if board.turn != expected_turn:
+                    board.turn = expected_turn
             hist_i = position_histories[i] if position_histories is not None else None
             policies[i], values[i] = self._evaluate_position(board, hist_i)
 

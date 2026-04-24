@@ -188,16 +188,25 @@ def main(argv: Sequence[str]) -> None:
 
   opening_boards = list()
 
-  with open(_OPENINGS_PATH.value, 'r') as file:
-    while (game := chess.pgn.read_game(file)) is not None:
-      opening_boards.append(game.end().board())
+  openings_file = _OPENINGS_PATH.value
+  if openings_file.endswith('.fen'):
+    with open(openings_file, 'r') as file:
+      for line in file:
+        fen = line.strip()
+        if fen:
+          opening_boards.append(chess.Board(fen))
+  else:
+    with open(openings_file, 'r') as file:
+      while (game := chess.pgn.read_game(file)) is not None:
+        opening_boards.append(game.end().board())
 
   # We subsample the openings according to the desired number of games.
   rng = np.random.default_rng(seed=1)
+  desired = _NUM_GAMES.value // 2
   opening_indices = rng.choice(
       np.arange(len(opening_boards)),
       # Divide by two as we consider both sides per opening (white and black).
-      size=_NUM_GAMES.value // 2,
+      size=min(desired, len(opening_boards)),
       replace=False,
   )
   opening_boards = list(opening_boards[idx] for idx in opening_indices)

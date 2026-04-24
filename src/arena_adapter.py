@@ -37,7 +37,6 @@ import os
 import sys
 import types as _types
 from typing import Callable, Dict, Optional
-import scipy.special
 
 import numpy as np
 
@@ -148,8 +147,6 @@ class SearchlessChessAdapter(_get_base_class()):
         hparams=None,
         player_white: int = 1,
         player_black: int = 2,
-        debug: bool = False,
-        model_name: str = "?",
     ):
         super().__init__()
         self.sc_engine = sc_engine
@@ -158,41 +155,17 @@ class SearchlessChessAdapter(_get_base_class()):
         self.num_arena_actions = num_arena_actions
         self.player_white = player_white
         self.player_black = player_black
-        self.model_name = model_name
         # Attributes the arena / MCTS may read.
         self.logic = logic
         self.hparams = hparams
-        self.debug = debug
-        self._call_count = 0
 
     # ----- torch.nn.Module interface the arena expects --------------------
 
     def forward_for_mcts(self, batch: dict) -> dict:
         boards = batch["boards"]
         players = batch["current_player"]
-        position_histories = batch.get("position_histories")  # may be None
-        plies = batch.get("plies", None)
-        # NEW: game move history (list of UCI strings) + opening FEN per game.
-        # Used to reconstruct a python-chess board with a populated move_stack
-        # so is_repetition() works correctly for diagnostics.
-        move_histories   = batch.get("move_histories", None)
-        opening_fens     = batch.get("opening_fens", None)
-        
-        # --- DIAGNOSTIC PROBE ---
-        if position_histories is not None:
-            # Check if any game in the batch has a history longer than 1 (initial state)
-            history_depths = [len(h) for h in position_histories if h is not None]
-            if any(d > 1 for d in history_depths):
-                # Print only occasionally to avoid spamming
-                if getattr(self, '_diag_count', 0) % 100 == 0:
-                    print(f"DEBUG: Adapter received history. Max depth: {max(history_depths)}")
-                self._diag_count = getattr(self, '_diag_count', 0) + 1
-        else:
-            if getattr(self, '_diag_err_count', 0) % 100 == 0:
-                print("DEBUG: CRITICAL - Adapter received NO position_histories!")
-            self._diag_err_count = getattr(self, '_diag_err_count', 0) + 1
-        # --- END PROBE ---
-        
+        position_histories = batch.get("position_histories")
+
         _is_tensor = torch is not None and isinstance(boards, torch.Tensor)
         if _is_tensor:
             boards_np = boards.cpu().numpy()
@@ -203,7 +176,6 @@ class SearchlessChessAdapter(_get_base_class()):
             players_np = np.asarray(players)
             device = None
 
-        import time as _time
         B = boards_np.shape[0]
         policies = np.zeros((B, self.num_arena_actions), dtype=np.float32)
         values = np.zeros(B, dtype=np.float32)
@@ -215,49 +187,8 @@ class SearchlessChessAdapter(_get_base_class()):
             )
             if board.turn != expected_turn:
                 board.turn = expected_turn
-
-            # Per-row position count dict, or None if arena isn't tracking history.
-            pos_counts = position_histories[i] if position_histories is not None else None
-            ply_i = int(plies[i]) if plies is not None else None
-
-            # NEW: build a python-chess Board WITH move_stack for accurate is_repetition().
-            # Falls back to None if the arena didn't pass history (older callers).
-            hist_board = None
-            if move_histories is not None and opening_fens is not None:
-                opening_fen = opening_fens[i]
-                mv_list     = move_histories[i] or []
-                if opening_fen is not None:
-                    hist_board = chess.Board(opening_fen)
-                    for uci in mv_list:
-                        try:
-                            hist_board.push_uci(uci)
-                        except Exception:
-                            hist_board = None
-                            break
-                        
-            _t0 = _time.perf_counter()
-            policies[i], values[i] = self._evaluate_position(board, pos_counts, ply_i)
-            _elapsed = _time.perf_counter() - _t0
-
-            if self.debug and self._call_count < 200:
-                best_action = int(np.argmax(policies[i]))
-                # Reverse-lookup action -> UCI
-                best_uci = "?"
-                for uci_str, idx in self.uci_to_arena_action.items():
-                    if idx == best_action:
-                        best_uci = uci_str
-                        break
-                import sys
-                print(
-                    f"[SC_DEBUG {self.model_name} #{self._call_count}] "
-                    f"{_elapsed:.3f}s  "
-                    f"FEN={board.fen()[:60]}  "
-                    f"best={best_uci} (p={policies[i][best_action]:.3f})  "
-                    f"v={values[i]:+.3f}  "
-                    f"B={B} player={int(players_np[i])}",
-                    file=sys.stderr, flush=True,
-                )
-                self._call_count += 1
+            hist_i = position_histories[i] if position_histories is not None else None
+            policies[i], values[i] = self._evaluate_position(board, hist_i)
 
         if torch is not None:
             return {
@@ -280,180 +211,78 @@ class SearchlessChessAdapter(_get_base_class()):
         from searchless_chess.src.engines import engine as engine_lib
         return engine_lib.get_ordered_legal_moves(board)
 
-    def _map_to_arena_policy(self, board, win_probs, temperature=0.01):
+    def _map_to_arena_policy(self, board, win_probs):
+        """Map per-legal-move scores to the arena's action space."""
         policy = np.zeros(self.num_arena_actions, dtype=np.float32)
-        moves = self._legal_moves_sorted(board)
-        move_probs = scipy.special.softmax(np.asarray(win_probs) / temperature)
-        for j, move in enumerate(moves):
+        for j, move in enumerate(self._legal_moves_sorted(board)):
             arena_idx = self.uci_to_arena_action.get(move.uci())
             if arena_idx is not None:
-                policy[arena_idx] = move_probs[j]
+                policy[arena_idx] = win_probs[j]
+        total = policy.sum()
+        if total > 0:
+            policy /= total
         return policy
 
-    def _map_to_arena_policy_onehot(self, chosen_move):
-        """Emit a one-hot arena policy on the adapter's chosen move."""
-        policy = np.zeros(self.num_arena_actions, dtype=np.float32)
-        arena_idx = self.uci_to_arena_action.get(chosen_move.uci())
-        if arena_idx is not None:
-            policy[arena_idx] = 1.0
-        return policy
+    def _apply_repetition_penalty(
+        self, board: chess.Board, win_probs: np.ndarray, position_history: dict,
+    ) -> None:
+        """Clamp win_probs to 0.5 for moves leading to threefold repetition.
 
-    def _arena_hash_from_chess_board(self, cb: chess.Board):
-        """Compute the same hash the arena uses, from a python-chess Board."""
-        # The arena stores boards as (69,) byte arrays; convert cb → arr → hash.
-        if not hasattr(self, '_hash_id_logged'):
-            self._hash_id_logged = True
-            print(f"[LOGIC-IDENTITY-ADAPTER] logic={self.logic.__name__}  "
-                f"hash_fn_id={id(self.logic.position_hash)}", flush=True)
-            
-        arr = self.logic.chess_to_board(cb)
-        return self.logic.position_hash(arr)
+        Mirrors DM's ``_update_scores_with_repetitions``.  Instead of relying
+        on ``chess.Board.can_claim_threefold_repetition()`` (which needs a full
+        move stack), we push each legal move and check whether the resulting
+        position already has count >= 2 in our arena position_history dict.
+        """
+        if self.logic is None:
+            return
+        chess_to_board_fn = getattr(self.logic, "chess_to_board", None)
+        position_hash_fn = getattr(self.logic, "position_hash", None)
+        if chess_to_board_fn is None or position_hash_fn is None:
+            return
+        from searchless_chess.src.engines import engine as engine_lib
+        sorted_legal_moves = engine_lib.get_ordered_legal_moves(board)
+        for i, move in enumerate(sorted_legal_moves):
+            board.push(move)
+            arr = chess_to_board_fn(board)
+            key = position_hash_fn(arr)
+            count = position_history.get(key, 0)
+            if count >= 2:  # would be 3rd occurrence → threefold
+                win_probs[i] = 0.5
+            board.pop()
 
-    def _evaluate_position(self, board: chess.Board, 
-                           position_counts=None, 
-                           ply=None, 
-                           hist_board: chess.Board | None = None):
-        
+    def _evaluate_position(self, board: chess.Board, position_history=None):
         from searchless_chess.src.engines import neural_engines
         import scipy.special
-        if ply is not None:
-            # fullmove_number is 1 at ply 0-1, 2 at ply 2-3, etc.
-            board.fullmove_number = ply // 2 + 1
 
-        # # TEMP diagnostic
-        # if not hasattr(self, '_fm_diag_count'):
-        #     self._fm_diag_count = 0
-        # self._fm_diag_count += 1
-        # if self._fm_diag_count % 500 == 0:
-        #     print(f"[FM-DIAG] ply={ply} set fullmove={board.fullmove_number} "
-        #         f"halfmove={board.halfmove_clock} fen={board.fen()}", flush=True)
-        # # end diagnostic
-        #   
         eng = self.sc_engine
 
         if isinstance(eng, neural_engines.ActionValueEngine):
             analysis = eng.analyse(board)
             probs = np.exp(analysis["log_probs"])
             win_probs = np.inner(probs, eng._return_buckets_values)
-                
-            moves = self._legal_moves_sorted(board)
-
-            if position_counts is not None:
-                for j, move in enumerate(moves):
-                    board.push(move)
-                    arr_adapter = self.logic.chess_to_board(board)
-                    hash_after = self._arena_hash_from_chess_board(board)
-                    prior_count = position_counts.get(hash_after, 0)
-
-                    # NEW: one-shot instrumentation
-                    if (not hasattr(self, "_hash_diag_done")
-                            and len(position_counts) > 30):
-                        sample_key  = next(iter(position_counts))
-                        # dump the arena-stored array for ONE of the keys already in the dict
-                        # (we can't recover the source array from the hash, but we CAN compare
-                        #  two adapter-computed arrays against each other across calls)
-                        print(f"[HASH-DIAG] dict_size={len(position_counts)}  "
-                            f"arr_adapter[65:69]={list(arr_adapter[65:69])}  "
-                            f"hash_adapter={hash_after}  "
-                            f"sample_dict_key={sample_key}", flush=True)
-                        self._hash_diag_done = True
-
-                    adapter_says_rep = (prior_count + 1 >= 3)
-                    # Real ground-truth rep check, using the history-carrying board.
-                    dm_says_rep = False
-                    pc_rep1 = pc_rep2 = pc_rep3 = None
-                    if hist_board is not None:
-                        hist_board.push(move)
-                        pc_rep1 = hist_board.is_repetition(1)
-                        pc_rep2 = hist_board.is_repetition(2)
-                        pc_rep3 = hist_board.is_repetition(3)
-                        dm_says_rep = hist_board.can_claim_threefold_repetition()
-                        hist_board.pop()
-
-                    if hist_board is not None and adapter_says_rep != dm_says_rep:
-                        print(f"REP-DISAGREE move={move.uci()} "
-                            f"adapter_dict_count={prior_count} "
-                            f"pc_rep1={pc_rep1} pc_rep2={pc_rep2} pc_rep3={pc_rep3} "
-                            f"dm_claim={dm_says_rep} "
-                            f"fen={board.fen()}",
-                            flush=True)
-
-                    if prior_count + 1 >= 3:
-                        win_probs[j] = 0.5
-                    board.pop()
-
-            # Match DM's tie-break: argmax over moves in get_ordered_legal_moves order.
-            best_index = int(np.argmax(win_probs))
-            policy = self._map_to_arena_policy_onehot(moves[best_index])
+            if position_history is not None:
+                self._apply_repetition_penalty(board, win_probs, position_history)
+            policy = self._map_to_arena_policy(board, win_probs)
+            # V(s) ≈ max_a Q(s,a), mapped from [0,1] to [-1,1]
             value = float(np.max(win_probs)) * 2.0 - 1.0
 
         elif isinstance(eng, neural_engines.StateValueEngine):
             analysis = eng.analyse(board)
-            # next_log_probs are already negated for the opponent by the engine,
-            # so win_probs here already ranks moves from the current player's POV.
+            # next_log_probs are already flipped (negated value for opponent).
             next_probs = np.exp(analysis["next_log_probs"])
             win_probs = np.inner(next_probs, eng._return_buckets_values)
-
-            moves = self._legal_moves_sorted(board)
-
-            if position_counts is not None:
-                for j, move in enumerate(moves):
-                    board.push(move)
-                    arr_adapter = self.logic.chess_to_board(board)
-                    hash_after = self._arena_hash_from_chess_board(board)
-                    prior_count = position_counts.get(hash_after, 0)
-
-                    # NEW: one-shot instrumentation
-                    if (not hasattr(self, "_hash_diag_done")
-                            and len(position_counts) > 30):
-                        sample_key  = next(iter(position_counts))
-                        # dump the arena-stored array for ONE of the keys already in the dict
-                        # (we can't recover the source array from the hash, but we CAN compare
-                        #  two adapter-computed arrays against each other across calls)
-                        print(f"[HASH-DIAG] dict_size={len(position_counts)}  "
-                            f"arr_adapter[65:69]={list(arr_adapter[65:69])}  "
-                            f"hash_adapter={hash_after}  "
-                            f"sample_dict_key={sample_key}", flush=True)
-                        self._hash_diag_done = True
-
-
-                    adapter_says_rep = (prior_count + 1 >= 3)
-                    dm_says_rep = board.can_claim_threefold_repetition()
-                    if adapter_says_rep != dm_says_rep:
-                        print(f"REP-DISAGREE move={move.uci()} adapter={adapter_says_rep} dm={dm_says_rep} "
-                            f"dict_count={prior_count} castling={board.castling_xfen()} ep={board.ep_square}")
-
-                    # Diagnostic
-                    if not hasattr(self, "_rep_diag"):
-                        self._rep_diag = {"total_checks": 0, "fired": 0, "last_size_bucket": 0}
-                    self._rep_diag["total_checks"] += 1
-                    if prior_count >= 1:  # position seen once before, interesting
-                        self._rep_diag["fired"] += 1
-                    size = len(position_counts)
-                    bucket = size // 25
-                    if bucket > self._rep_diag["last_size_bucket"]:
-                        self._rep_diag["last_size_bucket"] = bucket
-                        print(f"[REP-DIAG] dict_size={size}  "
-                            f"cum_checks={self._rep_diag['total_checks']}  "
-                            f"cum_hits={self._rep_diag['fired']}", flush=True)
-                                
-                    if prior_count + 1 >= 3:
-                        win_probs[j] = 0.5
-                    board.pop()
-
-            best_index = int(np.argmax(win_probs))
-            policy = self._map_to_arena_policy_onehot(moves[best_index])
+            if position_history is not None:
+                self._apply_repetition_penalty(board, win_probs, position_history)
+            policy = self._map_to_arena_policy(board, win_probs)
+            # Current position value.
             current_probs = np.exp(analysis["current_log_probs"])
-            current_value = float(np.inner(current_probs, eng._return_buckets_values))
-            value = current_value * 2.0 - 1.0
+            value = float(np.inner(current_probs, eng._return_buckets_values)) * 2.0 - 1.0
 
         elif isinstance(eng, neural_engines.BCEngine):
             analysis = eng.analyse(board)
-            # BC outputs action probabilities directly — these are already from
-            # the current player's POV (the model picks the best move to play),
-            # so no perspective flip needed.
             action_probs = scipy.special.softmax(np.asarray(analysis["log_probs"]))
             policy = self._map_to_arena_policy(board, action_probs)
+            # BC has no value head.
             value = 0.0
 
         else:
@@ -476,10 +305,9 @@ def load_for_arena(
     checkpoint_dir: Optional[str] = None,
     checkpoint_step: Optional[int] = None,
     use_ema_params: bool = False,
-    predict_batch_size: int = 32,
+    predict_batch_size: int = 1,
     player_white: int = 1,
     player_black: int = 2,
-    debug: bool = False,
 ) -> SearchlessChessAdapter:
     """Load a searchless_chess model and wrap it for arena use.
 
@@ -589,6 +417,4 @@ def load_for_arena(
         hparams=hparams,
         player_white=player_white,
         player_black=player_black,
-        debug=debug,
-        model_name=model_name,
     )

@@ -314,6 +314,15 @@ class SearchlessChessAdapter(_get_base_class()):
         from searchless_chess.src.engines import neural_engines
         import scipy.special
 
+        # Terminal position — no legal moves, nothing to evaluate.
+        if board.is_game_over(claim_draw=True):
+            policy = np.zeros(self.num_arena_actions, dtype=np.float32)
+            if board.is_checkmate():
+                value = -1.0  # side to move is checkmated
+            else:
+                value = 0.0  # draw (stalemate, repetition, 50-move, insufficient)
+            return policy, value
+
         eng = self.sc_engine
 
         if isinstance(eng, neural_engines.ActionValueEngine):

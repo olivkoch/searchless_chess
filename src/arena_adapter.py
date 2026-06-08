@@ -57,7 +57,10 @@ class _PermissiveDummy:
 class _PermissiveModule(_types.ModuleType):
     """Module stub that returns a permissive dummy for any attribute access."""
     def __getattr__(self, name):
-        return _PermissiveDummy
+        # Let Python/module internals behave normally.
+        if name.startswith("__"):
+            raise AttributeError(name)
+        return _PermissiveDummy()  # instance, not class
 
 
 for _mod_name, _sub_names in [
@@ -66,9 +69,11 @@ for _mod_name, _sub_names in [
 ]:
     if _mod_name not in sys.modules:
         _stub = _PermissiveModule(_mod_name)
+        _stub.__file__ = "<stub>"
         sys.modules[_mod_name] = _stub
         for _sub_name in _sub_names:
             _sub_mod = _PermissiveModule(_sub_name)
+            _sub_mod.__file__ = "<stub>"
             sys.modules[_sub_name] = _sub_mod
             setattr(_stub, _sub_name.split(".")[-1], _sub_mod)
 

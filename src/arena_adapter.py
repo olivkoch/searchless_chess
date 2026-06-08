@@ -315,7 +315,10 @@ class SearchlessChessAdapter(_get_base_class()):
         import scipy.special
 
         # Terminal position — no legal moves, nothing to evaluate.
-        if board.is_game_over(claim_draw=True):
+        # Keep claimable draws non-terminal for arena play. The arena environment
+        # uses its own repetition handling and still expects a move here.
+        if board.is_game_over(claim_draw=False):
+        # if board.is_game_over(claim_draw=True):
             policy = np.zeros(self.num_arena_actions, dtype=np.float32)
             if board.is_checkmate():
                 value = -1.0  # side to move is checkmated

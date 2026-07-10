@@ -246,15 +246,14 @@ class SearchlessChessAdapter(_get_base_class()):
 
     def _map_to_arena_policy_onehot(self, board, win_probs):
         sorted_moves = self._legal_moves_sorted(board)
-        order = np.argsort(win_probs)[::-1]  # best-first, with fallback
-        for idx in order:
+        for idx in np.argsort(win_probs)[::-1]:
             arena_idx = self.uci_to_arena_action.get(sorted_moves[idx].uci())
             if arena_idx is not None:
                 policy = np.zeros(self.num_arena_actions, dtype=np.float32)
                 policy[arena_idx] = 1.0
                 return policy
         raise KeyError(
-            f"No legal move mappable to arena action space at {board.fen()}; "
+            f"No legal move maps to arena action space at {board.fen()}; "
             f"legal={[m.uci() for m in sorted_moves]}"
         )
 

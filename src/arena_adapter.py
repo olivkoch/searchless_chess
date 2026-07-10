@@ -197,7 +197,10 @@ class SearchlessChessAdapter(_get_base_class()):
             ):
                 board = chess.Board(opening_fens[i])
                 for uci in move_histories[i]:
-                    board.push_uci(uci)
+                    mv = chess.Move.from_uci(uci)
+                    if not board.is_legal(mv):
+                        raise ValueError(f"illegal recorded move {uci} at {board.fen()}")
+                    board.push(mv)
             else:
                 board = self.board_to_chess_fn(boards_np[i])
                 expected_turn = (
@@ -242,21 +245,18 @@ class SearchlessChessAdapter(_get_base_class()):
         return policy
 
     def _map_to_arena_policy_onehot(self, board, win_probs):
-        """One-hot policy: all mass on the argmax move (DM's sorted order).
-
-        DM's ``play()`` calls ``np.argmax(win_probs)`` over sorted legal
-        moves.  Normalising and re-indexing into the arena action space can
-        change which move wins on near-ties because ``np.argmax`` breaks
-        ties by choosing the lowest index.  A one-hot avoids that.
-        """
-        best_idx = int(np.argmax(win_probs))
         sorted_moves = self._legal_moves_sorted(board)
-        best_uci = sorted_moves[best_idx].uci()
-        arena_idx = self.uci_to_arena_action.get(best_uci)
-        policy = np.zeros(self.num_arena_actions, dtype=np.float32)
-        if arena_idx is not None:
-            policy[arena_idx] = 1.0
-        return policy
+        order = np.argsort(win_probs)[::-1]  # best-first, with fallback
+        for idx in order:
+            arena_idx = self.uci_to_arena_action.get(sorted_moves[idx].uci())
+            if arena_idx is not None:
+                policy = np.zeros(self.num_arena_actions, dtype=np.float32)
+                policy[arena_idx] = 1.0
+                return policy
+        raise KeyError(
+            f"No legal move mappable to arena action space at {board.fen()}; "
+            f"legal={[m.uci() for m in sorted_moves]}"
+        )
 
     def _apply_repetition_penalty(
         self, board: chess.Board, win_probs: np.ndarray, position_history: dict,
